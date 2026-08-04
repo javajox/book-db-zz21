@@ -1,9 +1,9 @@
 plugins {
     id 'java'
     id 'org.springframework.boot' version '4.1.0'
+    id 'io.spring.dependency-management' version '1.1.7'
+    id 'com.vaadin'
 }
-
-apply plugin: 'io.spring.dependency-management'
 
 group = 'org.wintermutecore'
 version = '0.0.1-SNAPSHOT'
@@ -16,8 +16,18 @@ java {
 
 repositories {
     mavenCentral()
+    maven { url = 'https://maven.vaadin.com/vaadin-addons' }
 }
 
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'com.vaadin:vaadin-spring-boot-starter'
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+    developmentOnly 'com.vaadin:vaadin-dev'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "com.vaadin:vaadin-bom:$vaadinVersion"
+    }
 }
