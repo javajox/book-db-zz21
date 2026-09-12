@@ -149,6 +149,93 @@ Both endpoints use the same immutable book IDs, allowing consumers to match brie
 
 ## Technical details
 
-This project must be implemented in Java using JDK25. As the main framework SpringBoot must be used. As GUI Vaadin must be used. Because the system is small and will have
-like 1-2 users the SQLite DB will be used. The final result must be a Jar file (something like fatJar) that will contain everthing
-the DB will be of course an external file
+### Technology stack
+
+The application must use the following technologies:
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| Language and runtime | Java 25 | Application development using JDK 25 and execution on a compatible Java 25 runtime. |
+| Application framework | Spring Boot | Application startup, dependency injection, configuration, REST controllers, and an embedded web server. |
+| Web GUI | Vaadin Flow | Browser-based management views implemented in Java and integrated with Spring Boot. |
+| Database | SQLite | Embedded relational storage in an external database file. |
+| Build system | Gradle Wrapper | Repeatable builds using the Gradle version defined in the repository. |
+| Distribution | Executable Spring Boot JAR | A single application artifact containing runtime dependencies and production frontend assets. |
+
+The current build selects Spring Boot `4.1.0`, Vaadin `25.2.5`, and Gradle `9.6.1`. Dependency and plugin versions must remain pinned in the build configuration; upgrades must be checked for compatibility with Java 25 and with each other.
+
+### Application structure
+
+The system is intended for approximately one or two operators and must run as a single application instance. The Vaadin GUI and REST API share the same Spring Boot process and database.
+
+Separate the implementation into the following responsibilities:
+
+- **Presentation:** Vaadin views implement the operator workflows; REST controllers expose `/books-brief` and `/books-full` to external consumers.
+- **Application services:** Shared services enforce validation, book ID generation, and transaction boundaries. Both the GUI and API use these services where applicable.
+- **Persistence:** Repositories read and write books, authors, publishers, and their relationships in SQLite.
+- **API models:** Explicit response objects define the JSON contract independently of the database schema and internal entities.
+
+Vaadin views may call application services directly. Additional public write endpoints are not required by the current workflows. Blocking database access is sufficient for the expected workload.
+
+### Database and persistence
+
+SQLite is suitable for the expected small workload and requires no separate database server. The application must access it through a SQLite JDBC driver. Spring JDBC with the Xerial SQLite JDBC driver is the recommended starting point; the exact persistence dependencies remain to be selected.
+
+- Store the database outside the JAR, on a local persistent filesystem in a directory writable by the application. The application also needs permission to create SQLite journal and temporary companion files in that directory.
+- Store books, authors, and publishers as separate records. Use a join table for the relationship between books and authors, and a nullable publisher reference on each book. Detailed entity fields and API representations remain subject to the decisions listed in [Details to finalize before implementation](#details-to-finalize-before-implementation).
+- Enforce the book ID's uniqueness in the database. Apply appropriate foreign keys, non-null constraints, and checks for the attribute limits in addition to service-level validation. Enable SQLite foreign-key enforcement on every database connection.
+- Save a book and its relationship changes in a single transaction. Keep write transactions short and never hold a transaction open while the operator is filling in a form.
+- Configure write-ahead logging (WAL) to allow reads while a write is in progress. SQLite still permits only one writer at a time; configure a bounded busy timeout and return a clear failure if a write cannot acquire the required lock.
+- Use parameterized SQL for values supplied by users or API clients.
+
+The database must be managed through versioned migrations. On first startup, the application creates the schema in the configured database file. Later startups apply pending migrations while preserving existing data. Normal startup must never drop and recreate the schema. If migration fails, startup must fail with a useful diagnostic rather than serve requests against a partially initialized schema.
+
+### Build and packaging
+
+The release artifact must be an executable Spring Boot JAR produced by Gradle's `bootJar` task. It must include application classes, runtime dependencies, the embedded web server, and Vaadin's compiled production frontend assets.
+
+The production build must enable Vaadin production mode. The intended build command is:
+
+```bash
+./gradlew clean build -Pvaadin.productionMode=true
+```
+
+The executable artifact is produced under `build/libs/`. Release verification must confirm that production frontend assets are included and development-only dependencies are excluded. If the build also produces a plain JAR, distribute the executable Spring Boot JAR.
+
+Building may require Node.js and frontend tooling managed by the Vaadin Gradle plugin. Running the packaged application must not require Node.js, Gradle, or a separate servlet container. A compatible Java 25 runtime is required on the deployment machine and is not included in the JAR.
+
+The database, backups, external configuration, and any separately stored cover-image files must remain outside the JAR so that replacing the application artifact does not replace user data.
+
+### Runtime configuration
+
+Use Spring Boot's external configuration support so deployment settings can be supplied through a configuration file, environment variables, or command-line arguments.
+
+The following settings define the initial configuration contract. The custom `bookdb.*` properties must be implemented as part of the persistence setup; they are not provided by Spring Boot itself.
+
+| Property | Initial default | Meaning |
+|----------|-----------------|---------|
+| `server.port` | `8080` | HTTP port used by the GUI and REST API. |
+| `bookdb.database.path` | `./data/books.db` | Path to the external SQLite database file. Relative paths are resolved from the process working directory. |
+| `bookdb.database.busy-timeout-ms` | `5000` | Maximum time a database connection waits for a lock before reporting that the database is busy. |
+
+For example, after implementing these settings and naming the release artifact `book-db-zz21.jar`, the application can be started with:
+
+```bash
+java -jar book-db-zz21.jar --server.port=8080 --bookdb.database.path=/var/lib/book-db-zz21/books.db
+```
+
+Create the data directory if it does not exist and permissions allow it. If the configured path cannot be used, fail startup with a clear error; do not silently switch to another database. Log the resolved database path at startup. Production deployments should use an explicit absolute path so a change of working directory cannot accidentally select a new database.
+
+### Operations and data durability
+
+- Run one application process against the database on the same host. Sharing the WAL database over a network filesystem or running multiple application instances is outside the initial deployment model.
+- Log startup, shutdown, migration results, and application errors using Spring Boot's logging facilities. API error responses must not expose stack traces or database internals.
+- On shutdown, stop accepting new work and close database connections cleanly. After restarting, previously saved records and their IDs must remain available.
+- Back up persistent data independently of the JAR. For a simple offline backup, stop the application cleanly, close all database connections, and copy the database. For a live backup, use SQLite's backup facilities; copying only the main database file while WAL writes are active is not a reliable backup.
+- Include separately stored cover images in the backup if that storage approach is selected. Document and verify the restore procedure, and take a backup before applying schema upgrades to an existing deployment.
+
+### Verification and remaining decisions
+
+Implementation verification must cover validation and book ID generation, repository operations against a real SQLite database, migrations, transaction rollback, and the JSON contracts of both API endpoints. A release smoke test must start the production JAR, open the GUI, create and edit a book, retrieve it through both endpoints, and confirm that its data and ID survive an application restart.
+
+Before deployment, finalize the persistence and migration libraries, cover-image storage, operator authentication, API access policy, and the hosting arrangement, including HTTPS if accessed over a network. These choices must be documented alongside the unresolved data-model and API details in the Workflows section.
