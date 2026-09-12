@@ -84,11 +84,65 @@ The suffixes below are illustrative; actual suffixes are generated randomly.
 
 ## Workflows
 
-The system must be able to enter information about
-   * Authors
-   * Publishers
-   * Books
-So there should be UI views that allow to add/edit information about books themselves, also authors, publishers.
-Also as described above, the system must support two JSON RESTful api endpoints:
-   * /books-full - return a json with full information about books
-   * /books-brief - reutrn only brief information
+The system supports two main activities: an operator manages book information through the web GUI, and external systems retrieve that information through the RESTful API.
+
+### Manage authors and publishers
+
+The GUI must provide separate views for managing authors and publishers. Books reference these reusable records so that the operator can select existing authors and publishers when entering a book.
+
+1. The operator opens the authors or publishers view and browses or searches existing records by name.
+2. To add a record, the operator selects **Add**, enters a name and any other supported details, and saves it. The name is required and must not contain only whitespace.
+3. To edit a record, the operator selects an existing entry, updates its details, and saves the changes.
+4. The system validates the input, saves valid changes, and displays a confirmation. The record is then available for selection when adding or editing books.
+
+Editing an author or publisher updates the information displayed for all books linked to that record. Authors with the same name must be distinguishable as separate records; a matching name alone does not establish that they are the same person.
+
+### Add a book
+
+1. The operator opens the books view and selects **Add book**.
+2. The operator enters the book details according to the [System attributes](#system-attributes), selects one or more authors, and optionally selects a publisher. Missing author or publisher records can be created through their management views.
+3. The operator may provide optional information, including ISBNs and a cover image. Optional fields may be left empty and are stored as `NULL` where the attribute definition allows it.
+4. The operator selects **Save**. The system validates all entered values against the attribute constraints and identifies any fields requiring correction.
+5. If validation succeeds, the system generates an immutable ID according to the [Book ID format](#book-id-format) and saves the complete record and its author and publisher links.
+6. The GUI displays the saved book and its ID. The book becomes available through both API endpoints.
+
+The operator does not enter the book ID manually. A failed save must not leave a partially created book record or incomplete relationships.
+
+### Find and edit a book
+
+1. The operator opens the books view and browses or searches for a book by title, author, ISBN, or system ID.
+2. The operator selects a result to view its full details and chooses **Edit** to make changes.
+3. The operator updates the book attributes or its author and publisher selections and saves the changes.
+4. The system validates and saves the changes, then displays the updated record. Subsequent API requests return the saved information.
+
+The system ID is read-only and remains unchanged even when the title changes. If saving fails, the previously saved record remains unchanged.
+
+### Form behavior and validation
+
+- Required fields must be clearly marked. Required text values must not be empty or contain only whitespace.
+- Validation must be enforced by the server, with clear field-specific messages in the GUI.
+- If validation or saving fails, the form must retain the operator's input so it can be corrected or retried.
+- Selecting **Cancel** discards unsaved changes and leaves stored records unchanged.
+- The GUI must distinguish a successful save from a failed save and must not show a success confirmation before persistence completes.
+
+### Retrieve books through the API
+
+External systems retrieve saved book records using the following read-only endpoints:
+
+| Method | Endpoint | Successful response |
+|--------|----------|---------------------|
+| `GET` | `/books-brief` | A JSON array of books containing only `title`, `authors`, `edition`, and `id`. |
+| `GET` | `/books-full` | A JSON array of books containing all attributes defined in [System attributes](#system-attributes). |
+
+1. The external system sends a request to the appropriate endpoint.
+2. The system retrieves the saved records and returns HTTP `200 OK` with `Content-Type: application/json`.
+3. If no books exist, the response is an empty array (`[]`). Optional attributes without values are represented as JSON `null`.
+
+Both endpoints use the same immutable book IDs, allowing consumers to match brief and full records. They must not modify stored data. If a request cannot be completed because of a server error, the API returns an appropriate HTTP error status and a JSON error message instead of a successful empty list.
+
+### Details to finalize before implementation
+
+- **Author and publisher data model:** The attribute table currently describes `authors` and `publisher` as strings. Define the separate entity schemas, their identifiers, and their relationships to books, and clarify whether the API exposes names, identifiers, or nested objects. Update the attribute table to match that decision.
+- **Cover images:** Define supported upload formats and size limits, storage behavior, and how `cover_image` is represented in JSON, such as an image URL.
+- **Duplicate books:** Define how possible duplicates are detected and whether they trigger a warning or prevent saving. A unique system ID alone does not prevent duplicate book information.
+- **API contract:** Define the error response structure. The endpoints above return all books; pagination, filtering, and sorting require a further contract if introduced.
