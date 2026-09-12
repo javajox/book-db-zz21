@@ -81,3 +81,14 @@ The suffixes below are illustrative; actual suffixes are generated randomly.
 | Dune | `dune-7k3m9x` |
 | Clean Code | `clean-code-4p8x2n` |
 | The Hobbit | `the-hobbit-9w6r2c` |
+
+## Workflows
+
+The system must be able to enter information about
+   * Authors
+   * Publishers
+   * Books
+So there should be UI views that allow to add/edit information about books themselves, also authors, publishers.
+Also as described above, the system must support two JSON RESTful api endpoints:
+   * /books-full - return a json with full information about books
+   * /books-brief - reutrn only brief information
