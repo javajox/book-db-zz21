@@ -146,3 +146,9 @@ Both endpoints use the same immutable book IDs, allowing consumers to match brie
 - **Cover images:** Define supported upload formats and size limits, storage behavior, and how `cover_image` is represented in JSON, such as an image URL.
 - **Duplicate books:** Define how possible duplicates are detected and whether they trigger a warning or prevent saving. A unique system ID alone does not prevent duplicate book information.
 - **API contract:** Define the error response structure. The endpoints above return all books; pagination, filtering, and sorting require a further contract if introduced.
+
+## Technical details
+
+This project must be implemented in Java using JDK25. As the main framework SpringBoot must be used. As GUI Vaadin must be used. Because the system is small and will have
+like 1-2 users the SQLite DB will be used. The final result must be a Jar file (something like fatJar) that will contain everthing
+the DB will be of course an external file
