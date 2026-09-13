@@ -7,25 +7,27 @@ zz21 has been added just to distinguish it from other projects.
 
 ## System attributes
 
-The following attributes are supported:
+Database attributes (SQL column names) must use lowercase words separated by underscores (`snake_case`), such as `publication_date`, `cover_type`, and `isbn_13`. Multiword table names follow the same convention. JSON attributes must use lowercase words separated by hyphens (`kebab-case`), such as `publication-date`, `cover-type`, and `isbn-13`. API response models explicitly map database storage to JSON keys.
 
-| Attribute         | System attribute   | Data Type | Data Type Constraints      | Description           |
-|-------------------|--------------------|-----------|----------------------------|-----------------------|
-| Title             | `title`            | String    | Max 50 chars               | The title of the book |
-| Author or authors | `authors`          | String    | Max 50 chars               | One or more authors who wrote the book                    |
-| Publication date  | `publication_date` | Date      | May be NULL                | The date when the book was published                      |
-| Edition           | `edition`          | Integer   | May be NULL, >0            | The edition of the book                                   |
-| Language          | `language`         | String    | Max 50 chars               | The language in which the book is written                 |
-| Book cover type   | `cover_type`       | String    | May be NULL, Max 30 chars  | The type of book cover                                    |
-| Print length      | `print_length`     | Integer   | > 0                        | The number of pages in the book                           |
-| ISBN-10           | `isbn_10`          | String    | May be NULL, max. 10 chars | The 10-digit International Standard Book Number           |
-| ISBN-13           | `isbn_13`          | String    | May be NULL, max. 13 chars | The 13-digit International Standard Book Number           |
-| Book weight       | `weight`           | Decimal   | May be NULL, > 0           | The weight of the book in kilograms                       |
-| Dimensions        | `dimensions`       | String    | May be NULL, max. 50 chars | The book dimensions, such as 17.78 x 1.91 x 24.77 cm      |
-| ID                | `id`               | String    | Required, unique, immutable; 8–19 chars | Internal identification of the book; see [Book ID format](#book-id-format) |
-| Keywords          | `keywords`         | String    | Comma separated string     | Comma-separated keywords that describe the book's content |
-| Cover image       | `cover_image`      | Image     | May be NULL                | Image of cover of the book                                |
-| Publisher         | `publisher`        | String    | May be NULL                | The publisher of the book                                 |
+The table below distinguishes database storage from the public JSON contract. Database columns belong to the books table unless a relationship is specified.
+
+| Attribute | Database column or relationship | JSON key | Logical data type | Constraints and meaning |
+|-----------|---------------------------------|----------|-------------------|-------------------------|
+| Title | `title` | `title` | String | Required, nonblank, max. 50 characters. |
+| Author or authors | `book_authors` join table: `book_id`, `author_id` | `authors` | Set of author references | Required, at least one distinct author. Each author name is nonblank and max. 50 characters. The API returns an array of names; author order has no meaning and is not preserved. |
+| Publication date | `publication_date` | `publication-date` | Date | Optional; a valid calendar date, returned as `YYYY-MM-DD`, or `null`. |
+| Edition | `edition` | `edition` | Integer | Optional; greater than zero, or `null`. |
+| Language | `language` | `language` | String | Required, nonblank, max. 50 characters. A language name, such as `English`. |
+| Book cover type | `cover_type` | `cover-type` | String | Optional, max. 30 characters, such as `Paperback`; otherwise `null`. |
+| Print length | `print_length` | `print-length` | Integer | Required; greater than zero. Number of pages. |
+| ISBN-10 | `isbn_10` | `isbn-10` | String | Optional; exactly 10 characters after normalization, valid ISBN-10 checksum, unique book identity; otherwise `null`. See [ISBN validation](#isbn-validation). |
+| ISBN-13 | `isbn_13` | `isbn-13` | String | Optional; exactly 13 digits after normalization, valid ISBN-13 prefix and checksum, unique book identity; otherwise `null`. See [ISBN validation](#isbn-validation). |
+| Book weight | `weight` | `weight` | Decimal | Optional; greater than zero, at most three decimal places, in kilograms; otherwise `null`. Returned as a JSON number. |
+| Dimensions | `dimensions` | `dimensions` | String | Optional, max. 50 characters, such as `17.78 x 1.91 x 24.77 cm`; otherwise `null`. |
+| ID | `id` | `id` | String | Required, unique, immutable, system-generated; 8–19 characters. See [Book ID format](#book-id-format). |
+| Keywords | `keywords` | `keywords` | String | Optional comma-separated keywords, max. 500 characters; otherwise `null`. |
+| Cover image | `cover_image`, `cover_image_content_type` | `cover-image` | Binary image and media type | Optional; image bytes stored as a SQLite BLOB. The API returns an object containing `content-type` and Base64 `data`, or `null`. See [Cover images](#cover-images). |
+| Publisher | `publisher_id` reference | `publisher` | Publisher reference | Optional; the API returns the publisher name, or `null`. Publisher names are nonblank and max. 200 characters. |
 
 The system will provide a RESTful API for providing data to other systems. The following two endpoints will be provided:
  - `/books-brief`: Retrieve a list of books, but only basic information:
@@ -34,6 +36,23 @@ The system will provide a RESTful API for providing data to other systems. The f
    * edition
    * id
  - `/books-full`: Retrieve full information about all books.
+
+### Authors and publishers
+
+Authors and publishers are reusable records, with the following initial schemas:
+
+| Entity | Fields | Identity and relationships |
+|--------|--------|----------------------------|
+| Author | System-generated positive integer `id`; required `name`, max. 50 characters. | The normalized name is unique. Books reference authors through a join table. |
+| Publisher | System-generated positive integer `id`; required `name`, max. 200 characters. | The normalized name is unique. A book has at most one publisher reference. |
+
+Author and publisher IDs are immutable internal identifiers; the book-list APIs expose their names. No additional author or publisher details are required for the initial implementation.
+
+Within this system, authors with the same name are the same author. For example, all books by `Gilbert Strang` refer to one author record named `Gilbert Strang`; the same applies to `Walter Rudin`. Publishers also have one record per normalized name.
+
+For name uniqueness and the metadata comparisons below, normalize text to Unicode NFC, trim leading and trailing whitespace, collapse consecutive whitespace to one space, and compare after lowercasing with a locale-independent rule. Preserve capitalization in display values. Accents and punctuation remain significant. Thus ` Gilbert  Strang ` and `gilbert strang` identify the same author.
+
+A book's authors form a set: the same author cannot be linked twice, and neither storage nor API consumers may rely on author order. Adding an existing author or publisher name must direct the operator to the existing record. Renaming a record to another record's normalized name is rejected; it does not silently merge records.
 
 ## Book ID format
 
@@ -62,7 +81,7 @@ The suffix consists of exactly six independently and randomly selected character
 
 Enforce a unique constraint on the complete ID in the database. If an insertion fails because the generated ID already exists, generate a new suffix and retry the insertion. This must also handle collisions between simultaneous requests.
 
-Each new book record receives its own ID, including records with the same title or different editions. The ID does not determine whether two records describe the same book.
+Each accepted new book record receives its own ID. Different editions, or other distinct books sharing a title, receive separate IDs only when they satisfy the [duplicate-book rules](#duplicate-books). A new random ID must never be used to bypass duplicate detection.
 
 ### Stability and use
 
@@ -91,22 +110,22 @@ The system supports two main activities: an operator manages book information th
 The GUI must provide separate views for managing authors and publishers. Books reference these reusable records so that the operator can select existing authors and publishers when entering a book.
 
 1. The operator opens the authors or publishers view and browses or searches existing records by name.
-2. To add a record, the operator selects **Add**, enters a name and any other supported details, and saves it. The name is required and must not contain only whitespace.
+2. To add a record, the operator selects **Add**, enters a name, and saves it. The system validates the name and rejects an existing normalized name with a message identifying the existing record.
 3. To edit a record, the operator selects an existing entry, updates its details, and saves the changes.
 4. The system validates the input, saves valid changes, and displays a confirmation. The record is then available for selection when adding or editing books.
 
-Editing an author or publisher updates the information displayed for all books linked to that record. Authors with the same name must be distinguishable as separate records; a matching name alone does not establish that they are the same person.
+Editing an author or publisher updates the information displayed for all books linked to that record. Same-name authors are represented by one reusable record according to [Authors and publishers](#authors-and-publishers). Unreferenced records can be deleted according to [Delete records](#delete-records).
 
 ### Add a book
 
 1. The operator opens the books view and selects **Add book**.
 2. The operator enters the book details according to the [System attributes](#system-attributes), selects one or more authors, and optionally selects a publisher. Missing author or publisher records can be created through their management views.
 3. The operator may provide optional information, including ISBNs and a cover image. Optional fields may be left empty and are stored as `NULL` where the attribute definition allows it.
-4. The operator selects **Save**. The system validates all entered values against the attribute constraints and identifies any fields requiring correction.
+4. The operator selects **Save**. The system validates all entered values against the attribute constraints, checks for duplicate books and ISBNs, and identifies any fields requiring correction.
 5. If validation succeeds, the system generates an immutable ID according to the [Book ID format](#book-id-format) and saves the complete record and its author and publisher links.
 6. The GUI displays the saved book and its ID. The book becomes available through both API endpoints.
 
-The operator does not enter the book ID manually. A failed save must not leave a partially created book record or incomplete relationships.
+The operator does not enter the book ID manually. A failed save must not leave a partially created book record, incomplete relationships, or an orphaned cover image.
 
 ### Find and edit a book
 
@@ -117,13 +136,59 @@ The operator does not enter the book ID manually. A failed save must not leave a
 
 The system ID is read-only and remains unchanged even when the title changes. If saving fails, the previously saved record remains unchanged.
 
+Title and author searches use partial matching with the text normalization defined above. ISBN searches use the normalized ISBN, including its equivalent ISBN-10 or ISBN-13 form, and system-ID searches use an exact match. A single search field may match any of these attributes.
+
+Only one operator works with the database at a time. Simultaneous editing by multiple operators, conflict-resolution workflows, and edit locks are outside the initial scope. API consumers may continue reading while the operator makes changes; transaction and integrity requirements still apply.
+
+### Delete records
+
+1. The operator selects a book, author, or publisher and chooses **Delete**.
+2. The GUI asks for confirmation and identifies the record being deleted. Cancelling leaves all records unchanged.
+3. The server validates whether deletion is allowed. A referenced author or publisher cannot be deleted; the GUI explains that linked books must first be edited or deleted.
+4. If validation succeeds, the system performs the deletion in one transaction and displays success only after persistence completes. If it fails, all existing data remains unchanged and the GUI displays an error.
+
+Deleting a book also deletes its author links and its stored cover image. It does not delete its authors or publisher. An unreferenced author or publisher may be deleted. Deletions are permanent; restoring deleted data requires a backup. Deleted books no longer appear in either API response.
+
 ### Form behavior and validation
 
 - Required fields must be clearly marked. Required text values must not be empty or contain only whitespace.
+- Normalize Unicode and whitespace as described above before checking text lengths and saving values. Preserve display capitalization. Empty optional fields are stored as `NULL`; zero is not a substitute for an absent numeric value.
+- Validate calendar dates, whole-number fields, and positive decimal weights on the server. Reject excess weight precision rather than silently rounding it.
+- Trim individual keywords, discard empty items, remove case-insensitive duplicates, and store the remaining values separated by a comma and a space. An empty result is `NULL`.
+- Author and publisher selections must reference existing records. At least one distinct author must remain after editing a book.
 - Validation must be enforced by the server, with clear field-specific messages in the GUI.
 - If validation or saving fails, the form must retain the operator's input so it can be corrected or retried.
 - Selecting **Cancel** discards unsaved changes and leaves stored records unchanged.
 - The GUI must distinguish a successful save from a failed save and must not show a success confirmation before persistence completes.
+
+### ISBN validation
+
+- Both ISBN fields are optional, but every supplied ISBN must be valid. Remove whitespace and hyphens before validation and storage; convert a final ISBN-10 `x` to uppercase `X`. Preserve leading zeros by storing ISBNs as strings.
+- ISBN-10 consists of nine digits followed by a digit or `X`, and must pass the standard modulo-11 checksum. ISBN-13 consists of 13 digits, begins with `978` or `979`, and must pass the standard alternating-weight modulo-10 checksum.
+- If both ISBN forms are supplied, they must identify the same edition. Convert ISBN-10 to its `978` ISBN-13 equivalent and compare it with the supplied ISBN-13. A `979` ISBN-13 has no ISBN-10 equivalent.
+- An ISBN cannot belong to more than one book. Enforce uniqueness of supplied ISBNs and of a canonical ISBN-13 identity derived from either field, so entering an ISBN-10 cannot bypass an existing equivalent ISBN-13, or vice versa. Multiple books may have `NULL` ISBNs.
+- Apply these checks when adding and editing, excluding the current record from duplicate comparisons. Keep an omitted API ISBN field `null` even if its equivalent can be derived internally.
+
+### Duplicate books
+
+Duplicate books are rejected, rather than merely producing a warning. A proposed book is a duplicate if either of the following matches another stored book:
+
+1. Its canonical ISBN identity, as defined in [ISBN validation](#isbn-validation).
+2. Its normalized title, unordered set of author IDs, edition, normalized language, and publisher ID all match. For this comparison, two absent editions are equal and two absent publishers are equal. This metadata rule applies whether or not ISBNs are supplied and prevents duplicate records without ISBNs or with different ISBN entries.
+
+The metadata combination defines the initial catalog's notion of a distinct book. A different edition, language, or publisher can identify a separate record, provided its ISBN is not already assigned. A different cover image, weight, page count, keywords, or randomly generated system ID does not by itself establish a distinct book.
+
+Check for duplicates on both creation and editing, identify the existing book in the GUI error, and leave saved data unchanged after rejection. Back the ISBN checks and a stored canonical metadata key with database unique constraints. Canonical metadata must encode the author set without depending on selection order and must handle absent values explicitly; it is updated atomically with the book and its relationships.
+
+### Cover images
+
+Cover images are stored inside the SQLite database as binary BLOBs, with their validated media type. Persistent cover-image files outside the database are not used.
+
+- Accept JPEG (`image/jpeg`) and PNG (`image/png`) uploads, with a maximum original file size of 5 MiB (5,242,880 bytes).
+- Validate the actual image content and confirm it can be decoded; a filename extension or client-supplied content type alone is insufficient. Reject empty, corrupt, unsupported, or oversized uploads with a field-specific error.
+- The operator can preview an image, replace it, or explicitly remove it. Editing other fields without supplying a new image retains the existing image.
+- Save or replace the image bytes and media type in the same transaction as the book. Removing a cover clears both values. Cancelling or failing a save leaves the previous stored image unchanged.
+- Store the validated uploaded bytes without Base64 encoding in the database. Base64 encoding is used only when serializing the image into JSON. A database backup includes the images.
 
 ### Retrieve books through the API
 
@@ -138,14 +203,63 @@ External systems retrieve saved book records using the following read-only endpo
 2. The system retrieves the saved records and returns HTTP `200 OK` with `Content-Type: application/json`.
 3. If no books exist, the response is an empty array (`[]`). Optional attributes without values are represented as JSON `null`.
 
-Both endpoints use the same immutable book IDs, allowing consumers to match brief and full records. They must not modify stored data. If a request cannot be completed because of a server error, the API returns an appropriate HTTP error status and a JSON error message instead of a successful empty list.
+Both endpoints use the same immutable book IDs, allowing consumers to match brief and full records. They must not modify stored data. Book order and author order are unspecified. The initial endpoints return all books; API pagination, filtering, and sorting are outside the initial contract.
 
-### Details to finalize before implementation
+### JSON representations
 
-- **Author and publisher data model:** The attribute table currently describes `authors` and `publisher` as strings. Define the separate entity schemas, their identifiers, and their relationships to books, and clarify whether the API exposes names, identifiers, or nested objects. Update the attribute table to match that decision.
-- **Cover images:** Define supported upload formats and size limits, storage behavior, and how `cover_image` is represented in JSON, such as an image URL.
-- **Duplicate books:** Define how possible duplicates are detected and whether they trigger a warning or prevent saving. A unique system ID alone does not prevent duplicate book information.
-- **API contract:** Define the error response structure. The endpoints above return all books; pagination, filtering, and sorting require a further contract if introduced.
+All JSON object keys, including nested objects and error responses, follow the lowercase, hyphen-separated convention. Database column names retain underscores; for example, `publication_date` maps to `publication-date` and `isbn_13` maps to `isbn-13`. Dates use `YYYY-MM-DD` without a time or time zone; integer and decimal attributes are JSON numbers; ISBNs and IDs are strings. Optional keys are included with `null` when unset.
+
+`authors` is an array of unique author display names. `publisher` is a display name or `null`. Internal author and publisher IDs are not included. `keywords` is a comma-separated string or `null`.
+
+Example `/books-brief` response:
+
+```json
+[
+  {
+    "title": "Dune",
+    "authors": ["Frank Herbert"],
+    "edition": null,
+    "id": "dune-7k3m9x"
+  }
+]
+```
+
+Example `/books-full` response:
+
+```json
+[
+  {
+    "title": "Dune",
+    "authors": ["Frank Herbert"],
+    "publication-date": null,
+    "edition": null,
+    "language": "English",
+    "cover-type": "Paperback",
+    "print-length": 896,
+    "isbn-10": "0441172717",
+    "isbn-13": "9780441172719",
+    "weight": null,
+    "dimensions": null,
+    "id": "dune-7k3m9x",
+    "keywords": "science fiction",
+    "cover-image": null,
+    "publisher": "Ace"
+  }
+]
+```
+
+When a cover exists, `cover-image` is an object with exactly two keys: `content-type`, containing `image/jpeg` or `image/png`, and `data`, containing the complete image bytes encoded as standard Base64 with padding and without line breaks or a data-URL prefix. The brief endpoint never includes image data.
+
+If an API request fails, return a JSON error object with exactly `error-code` and `message`. Use HTTP `500` with `internal-error` for unexpected failures, or HTTP `503` with `database-busy` when database lock waiting exceeds the configured timeout. Messages must be suitable for consumers and must not expose stack traces, SQL, or database paths. For example:
+
+```json
+{
+  "error-code": "database-busy",
+  "message": "The database is busy. Please retry later."
+}
+```
+
+An error must never be returned as HTTP `200` with an empty list.
 
 ## Technical details
 
@@ -166,7 +280,7 @@ The current build selects Spring Boot `4.1.0`, Vaadin `25.2.5`, and Gradle `9.6.
 
 ### Application structure
 
-The system is intended for approximately one or two operators and must run as a single application instance. The Vaadin GUI and REST API share the same Spring Boot process and database.
+The system must run as a single application instance, with only one operator working with the database at a time. The Vaadin GUI and REST API share the same Spring Boot process and database. External systems may read through the API while the operator works.
 
 Separate the implementation into the following responsibilities:
 
@@ -179,12 +293,15 @@ Vaadin views may call application services directly. Additional public write end
 
 ### Database and persistence
 
-SQLite is suitable for the expected small workload and requires no separate database server. The application must access it through a SQLite JDBC driver. Spring JDBC with the Xerial SQLite JDBC driver is the recommended starting point; the exact persistence dependencies remain to be selected.
+SQLite is suitable for the expected small workload and requires no separate database server. Use Spring JDBC with the Xerial SQLite JDBC driver. Select and pin compatible persistence and migration library versions when persistence implementation begins.
 
 - Store the database outside the JAR, on a local persistent filesystem in a directory writable by the application. The application also needs permission to create SQLite journal and temporary companion files in that directory.
-- Store books, authors, and publishers as separate records. Use a join table for the relationship between books and authors, and a nullable publisher reference on each book. Detailed entity fields and API representations remain subject to the decisions listed in [Details to finalize before implementation](#details-to-finalize-before-implementation).
-- Enforce the book ID's uniqueness in the database. Apply appropriate foreign keys, non-null constraints, and checks for the attribute limits in addition to service-level validation. Enable SQLite foreign-key enforcement on every database connection.
-- Save a book and its relationship changes in a single transaction. Keep write transactions short and never hold a transaction open while the operator is filling in a form.
+- Use lowercase, underscore-separated SQL column names throughout the schema, including foreign keys and internal validation columns. Apply the database-to-JSON mappings defined in [System attributes](#system-attributes) when creating API response objects.
+- Store books, authors, and publishers as separate records using the fields and relationships defined in [System attributes](#system-attributes). Use the `book_authors` join table with a unique (`book_id`, `author_id`) pair and no author-order column, and a nullable `publisher_id` reference on each book.
+- Store each cover's bytes in the `cover_image` BLOB column and its media type in `cover_image_content_type`. Both are present or both are `NULL`. Map these columns to the JSON `cover-image` object's `data` and `content-type` keys respectively. Cover changes participate in the book's transaction.
+- Enforce unique book IDs, normalized author and publisher names, supplied ISBNs, canonical ISBN identities, and canonical book metadata keys in the database. Apply appropriate foreign keys, non-null constraints, and checks for the attribute limits in addition to service-level validation. Enable SQLite foreign-key enforcement on every database connection.
+- Use restrictive foreign-key deletion rules for referenced authors and publishers; deleting them must not delete books or silently clear their relationships. Deleting a book removes its author links and cover data in the same transaction.
+- Save a book, its duplicate-detection keys, cover image, and relationship changes in a single transaction. Keep write transactions short and never hold a transaction open while the operator is filling in a form.
 - Configure write-ahead logging (WAL) to allow reads while a write is in progress. SQLite still permits only one writer at a time; configure a bounded busy timeout and return a clear failure if a write cannot acquire the required lock.
 - Use parameterized SQL for values supplied by users or API clients.
 
@@ -204,7 +321,7 @@ The executable artifact is produced under `build/libs/`. Release verification mu
 
 Building may require Node.js and frontend tooling managed by the Vaadin Gradle plugin. Running the packaged application must not require Node.js, Gradle, or a separate servlet container. A compatible Java 25 runtime is required on the deployment machine and is not included in the JAR.
 
-The database, backups, external configuration, and any separately stored cover-image files must remain outside the JAR so that replacing the application artifact does not replace user data.
+The database, including all cover-image BLOBs, backups, and external configuration must remain outside the JAR so that replacing the application artifact does not replace user data.
 
 ### Runtime configuration
 
@@ -232,10 +349,19 @@ Create the data directory if it does not exist and permissions allow it. If the 
 - Log startup, shutdown, migration results, and application errors using Spring Boot's logging facilities. API error responses must not expose stack traces or database internals.
 - On shutdown, stop accepting new work and close database connections cleanly. After restarting, previously saved records and their IDs must remain available.
 - Back up persistent data independently of the JAR. For a simple offline backup, stop the application cleanly, close all database connections, and copy the database. For a live backup, use SQLite's backup facilities; copying only the main database file while WAL writes are active is not a reliable backup.
-- Include separately stored cover images in the backup if that storage approach is selected. Document and verify the restore procedure, and take a backup before applying schema upgrades to an existing deployment.
+- Cover images are included in the database backup. Document and verify the restore procedure for book records, relationships, and image BLOBs, and take a backup before applying schema upgrades to an existing deployment.
 
 ### Verification and remaining decisions
 
-Implementation verification must cover validation and book ID generation, repository operations against a real SQLite database, migrations, transaction rollback, and the JSON contracts of both API endpoints. A release smoke test must start the production JAR, open the GUI, create and edit a book, retrieve it through both endpoints, and confirm that its data and ID survive an application restart.
+Implementation verification must cover:
 
-Before deployment, finalize the persistence and migration libraries, cover-image storage, operator authentication, API access policy, and the hosting arrangement, including HTTPS if accessed over a network. These choices must be documented alongside the unresolved data-model and API details in the Workflows section.
+- Attribute validation, ISBN checksums and equivalent ISBN forms, and immutable book ID generation.
+- Same-name author/publisher rejection, unordered author relationships, and duplicate-book rejection with and without ISBNs on both creation and editing.
+- Repository operations against a real SQLite database, migrations, database constraints, and complete transaction rollback, including cover images and duplicate-detection keys.
+- Valid and invalid cover uploads, image replacement/removal, and exact recovery of stored image bytes through the full API's Base64 representation.
+- Allowed book deletion, rejected deletion of referenced authors/publishers, and allowed deletion of unreferenced records.
+- The exact JSON keys, value types, nulls, empty arrays, and error responses of both API endpoints.
+
+A release smoke test must start the production JAR, open the GUI, create and edit a book with a cover image, retrieve it through both endpoints, and confirm that its data, ID, relationships, and image survive an application restart. It must also verify deletion behavior and restoration from a database backup.
+
+Operator authentication, API access policy, and the hosting arrangement, including HTTPS if accessed over a network, remain deployment decisions. Document these before deployment. The single-operator assumption does not itself define an authentication or network-access policy.
