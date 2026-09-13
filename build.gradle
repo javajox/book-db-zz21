@@ -31,3 +31,7 @@ dependencyManagement {
         mavenBom "com.vaadin:vaadin-bom:$vaadinVersion"
     }
 }
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
