@@ -293,7 +293,7 @@ Vaadin views may call application services directly. Additional public write end
 
 ### Database and persistence
 
-SQLite is suitable for the expected small workload and requires no separate database server. Use Spring JDBC with the Xerial SQLite JDBC driver. Select and pin compatible persistence and migration library versions when persistence implementation begins.
+SQLite is suitable for the expected small workload and requires no separate database server. Use Spring JDBC `7.0.8`, Xerial SQLite JDBC `3.53.2.0`, and Flyway `12.4.0` for versioned SQL migrations. These versions are pinned through the Spring Boot `4.1.0` dependency BOM. Selection rationale and compatibility checks are recorded in [Implementation decisions](implementation_decisions.md#dependency-selection).
 
 - Store the database outside the JAR, on a local persistent filesystem in a directory writable by the application. The application also needs permission to create SQLite journal and temporary companion files in that directory.
 - Use lowercase, underscore-separated SQL column names throughout the schema, including foreign keys and internal validation columns. Apply the database-to-JSON mappings defined in [System attributes](#system-attributes) when creating API response objects.
@@ -364,4 +364,4 @@ Implementation verification must cover:
 
 A release smoke test must start the production JAR, open the GUI, create and edit a book with a cover image, retrieve it through both endpoints, and confirm that its data, ID, relationships, and image survive an application restart. It must also verify deletion behavior and restoration from a database backup.
 
-Operator authentication, API access policy, and the hosting arrangement, including HTTPS if accessed over a network, remain deployment decisions. Document these before deployment. The single-operator assumption does not itself define an authentication or network-access policy.
+The initial deployment plan uses one private Linux host, an Nginx HTTPS reverse proxy, an operator GUI login, and a separate bearer token for API reads. Credential provisioning, external storage, and access boundaries are defined in [Implementation decisions](implementation_decisions.md#initial-deployment-and-access-policy). Implement and verify these controls in stage 14 before network deployment; selecting the policy in stage 1 does not enable it in the starter application.

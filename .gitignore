@@ -16,6 +16,31 @@ build/
 !**/dev-bundle/webapp/VAADIN/build
 target/
 
+# Local application data and SQLite companion files
+/data/
+/backups/
+/logs/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+
+# Local deployment configuration and credentials
+/config/
+/secrets/
+.env
+.env.*
+!.env.example
+*.local.properties
+*.local.yml
+*.local.yaml
+*.p12
+*.pfx
+*.jks
+*.key
+
 # Package Files #
 *.jar
 *.war

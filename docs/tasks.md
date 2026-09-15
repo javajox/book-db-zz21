@@ -2,7 +2,7 @@
 
 This checklist describes the remaining work required to implement and deliver the project defined in [system_specification.md](system_specification.md). Execute the numbered stages in order and complete each stage's verification before relying on it in later stages. The specification is authoritative; update this checklist when requirements change.
 
-This document is a plan. Creating it does not execute any implementation tasks. All checkboxes below represent work or verification still to perform during implementation.
+This document tracks implementation progress. Checked tasks have been completed and verified; unchecked tasks remain to be performed.
 
 The existing foundation includes the Java 25 toolchain, pinned Spring Boot 4.1.0 and Vaadin 25.2.5 versions, Gradle Wrapper 9.6.1 with its JAR tracked, JUnit Platform configuration, a Spring Boot entry point, and a placeholder Vaadin view. Extend this foundation rather than recreating it.
 
@@ -10,14 +10,16 @@ The existing foundation includes the Java 25 toolchain, pinned Spring Boot 4.1.0
 
 Specification: [Technology stack](system_specification.md#technology-stack), [Application structure](system_specification.md#application-structure), [Verification and remaining decisions](system_specification.md#verification-and-remaining-decisions).
 
-- [ ] **1.1** Verify the current project builds from a fresh checkout with the committed Gradle Wrapper and Java 25. Preserve the pinned framework and plugin versions unless a documented compatibility issue requires a change.
-- [ ] **1.2** Select compatible, pinned Spring JDBC and Xerial SQLite JDBC dependencies and a migration library with verified SQLite support. Confirm that the migration library can initialize a new database, upgrade an existing database, and stop startup on migration failure.
-- [ ] **1.3** Add the selected persistence and migration dependencies and any required validation or testing dependencies to Gradle. Keep development-only dependencies separate from the production runtime.
-- [ ] **1.4** Decide and document the initial hosting arrangement, GUI operator authentication, and API access policy. Specify how any required credentials are provisioned and how HTTPS is provided when accessed over a network. Implement the chosen policy in stage 14.
-- [ ] **1.5** Record the deployment assumptions: one application process, one operator working at a time, local persistent SQLite storage, and API readers allowed during operator activity. Keep simultaneous-operator editing, edit locks, public write APIs, and API pagination/filtering/sorting outside the initial scope.
-- [ ] **1.6** Exclude generated databases, WAL/journal/companion files, backups, logs, and local deployment credentials from Git before creating local application data. Keep the Gradle Wrapper JAR tracked.
+- [x] **1.1** Verify the current project builds from a fresh checkout with the committed Gradle Wrapper and Java 25. Preserve the pinned framework and plugin versions unless a documented compatibility issue requires a change.
+- [x] **1.2** Select compatible, pinned Spring JDBC and Xerial SQLite JDBC dependencies and a migration library with verified SQLite support. Confirm that the migration library can initialize a new database, upgrade an existing database, and stop startup on migration failure.
+- [x] **1.3** Add the selected persistence and migration dependencies and any required validation or testing dependencies to Gradle. Keep development-only dependencies separate from the production runtime.
+- [x] **1.4** Decide and document the initial hosting arrangement, GUI operator authentication, and API access policy. Specify how any required credentials are provisioned and how HTTPS is provided when accessed over a network. Implement the chosen policy in stage 14.
+- [x] **1.5** Record the deployment assumptions: one application process, one operator working at a time, local persistent SQLite storage, and API readers allowed during operator activity. Keep simultaneous-operator editing, edit locks, public write APIs, and API pagination/filtering/sorting outside the initial scope.
+- [x] **1.6** Exclude generated databases, WAL/journal/companion files, backups, logs, and local deployment credentials from Git before creating local application data. Keep the Gradle Wrapper JAR tracked.
 
 Completion criterion: the build foundation works, persistence tooling is selected, and the access/deployment decisions needed for implementation are documented.
+
+Stage 1 evidence: [Implementation decisions](implementation_decisions.md) records the selected versions, migration checks, and initial deployment policy. The baseline and updated production builds passed in clean directories on Java 25; all three migration compatibility tests passed, the production JAR excluded development/test artifacts, and packaged GUI startup/shutdown passed. Ignore rules were checked for local data, configuration, the wrapper JAR, and source fixtures. Production persistence wiring and access controls remain in their later stages.
 
 ## 2. Establish application structure and test infrastructure
 
