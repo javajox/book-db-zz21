@@ -56,6 +56,23 @@ public final class SqliteFailures {
         };
     }
 
+    /**
+     * Whether the failure is specifically a primary-key violation.
+     *
+     * <p>This is how a collision on a generated book identifier is told apart from a duplicate ISBN
+     * or duplicate metadata: SQLite reports the {@code books.id} primary key as
+     * {@code SQLITE_CONSTRAINT_PRIMARYKEY} and every other unique constraint as
+     * {@code SQLITE_CONSTRAINT_UNIQUE}. The distinction matters because one of those should be
+     * retried with a new suffix and the others must never be — retrying a duplicate book would spin
+     * until it gave up and then report the wrong reason.
+     *
+     * <p>A typed result code rather than a parse of the message text, which also names the column
+     * but is not a contract.
+     */
+    public static boolean isPrimaryKeyViolation(Throwable failure) {
+        return resultCode(failure) == SQLiteErrorCode.SQLITE_CONSTRAINT_PRIMARYKEY;
+    }
+
     /** Whether the failure is a foreign-key constraint violation. */
     public static boolean isForeignKeyViolation(Throwable failure) {
         return resultCode(failure) == SQLiteErrorCode.SQLITE_CONSTRAINT_FOREIGNKEY;

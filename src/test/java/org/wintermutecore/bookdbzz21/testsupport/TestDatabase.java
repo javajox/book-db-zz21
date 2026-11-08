@@ -78,6 +78,16 @@ public final class TestDatabase implements AutoCloseable {
     }
 
     /**
+     * Creates a database with the application's schema and a custom busy timeout.
+     *
+     * <p>A short timeout is what makes a lock-contention test finish in milliseconds instead of
+     * waiting out the production default of five seconds.
+     */
+    public static TestDatabase withBusyTimeout(Path directory, int busyTimeoutMs) {
+        return create(directory, "application.db", busyTimeoutMs, APPLICATION_MIGRATIONS);
+    }
+
+    /**
      * Creates a database migrated with the given Flyway locations.
      *
      * <p>Intended for the migration upgrade and failure scenarios, which need fixture migrations
@@ -113,10 +123,15 @@ public final class TestDatabase implements AutoCloseable {
         if (!Files.exists(path)) {
             throw new IllegalStateException("Cannot reopen a database that does not exist: " + path);
         }
-        return new TestDatabase(path, dataSourceFor(path), null);
+        return new TestDatabase(path, dataSourceFor(path, DEFAULT_BUSY_TIMEOUT_MS), null);
     }
 
     private static TestDatabase create(Path directory, String fileName, String... locations) {
+        return create(directory, fileName, DEFAULT_BUSY_TIMEOUT_MS, locations);
+    }
+
+    private static TestDatabase create(
+            Path directory, String fileName, int busyTimeoutMs, String... locations) {
         Objects.requireNonNull(directory, "directory");
         Objects.requireNonNull(fileName, "fileName");
         var path = requireTemporary(directory.resolve(fileName));
@@ -126,7 +141,7 @@ public final class TestDatabase implements AutoCloseable {
             throw new IllegalStateException("Could not create the test database directory", e);
         }
 
-        var dataSource = dataSourceFor(path);
+        var dataSource = dataSourceFor(path, busyTimeoutMs);
         // SQLite creates the database file lazily, on the first connection. Without this, a
         // TestDatabase built with no migrations would hold a path to a file that does not exist
         // until some later statement happened to open a connection. Opening one here also applies
@@ -151,12 +166,12 @@ public final class TestDatabase implements AutoCloseable {
         return new TestDatabase(path, dataSource, result);
     }
 
-    private static SQLiteDataSource dataSourceFor(Path path) {
+    private static SQLiteDataSource dataSourceFor(Path path, int busyTimeoutMs) {
         var config = new SQLiteConfig();
         // Applied per connection by the driver, so replacement connections are configured too.
         config.enforceForeignKeys(true);
         config.setJournalMode(SQLiteConfig.JournalMode.WAL);
-        config.setBusyTimeout(DEFAULT_BUSY_TIMEOUT_MS);
+        config.setBusyTimeout(busyTimeoutMs);
 
         var dataSource = new SQLiteDataSource(config);
         dataSource.setUrl("jdbc:sqlite:" + path);
