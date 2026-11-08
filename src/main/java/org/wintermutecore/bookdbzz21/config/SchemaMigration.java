@@ -49,11 +49,10 @@ public class SchemaMigration {
             var flyway = Flyway.configure()
                     .dataSource(dataSource)
                     .locations(locations)
-                    // The migration folder does not exist until stage 6 creates it, and an absent
-                    // location is not an error today. Once real migrations exist this should become
-                    // true, so a JAR packaged without them fails loudly instead of starting against
-                    // an empty schema.
-                    .failOnMissingLocations(false)
+                    // A missing location is a packaging failure: the migrations exist in the source
+                    // tree, so if they are absent at runtime the JAR was built wrong. Failing here
+                    // beats starting against an empty schema and reporting it as a query error.
+                    .failOnMissingLocations(true)
                     .load();
 
             var result = flyway.migrate();

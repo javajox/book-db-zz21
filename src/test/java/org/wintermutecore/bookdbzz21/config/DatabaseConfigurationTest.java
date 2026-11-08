@@ -146,12 +146,16 @@ class DatabaseConfigurationTest {
     }
 
     @Test
-    void appliesTheApplicationMigrationLocationByDefault() {
-        // No migrations exist until stage 6, so nothing is applied; what this confirms is that the
-        // default location is wired and migration runs rather than being skipped.
+    void appliesTheApplicationSchemaByDefault() {
         runnerFor(directory.resolve("books.db")).run(context -> {
             assertThat(context).hasNotFailed();
-            assertThat(context.getBean(SchemaMigration.class).migrationsExecuted()).isZero();
+            assertThat(context.getBean(SchemaMigration.class).migrationsExecuted()).isEqualTo(1);
+
+            // The real application schema, not a fixture: startup wires db/migration by default.
+            assertThat(context.getBean(JdbcTemplate.class).queryForList(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE "
+                            + "'sqlite_%'", String.class))
+                    .contains("books", "authors", "publishers", "book_authors");
         });
     }
 
