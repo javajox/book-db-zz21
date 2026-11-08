@@ -11,7 +11,7 @@ import java.util.Objects;
  * @param id system-generated positive identifier
  * @param name display name, preserving the operator's capitalization
  */
-public record Publisher(long id, String name) {
+public record Publisher(long id, String name) implements NamedRecord {
 
     public Publisher {
         Objects.requireNonNull(name, "name");

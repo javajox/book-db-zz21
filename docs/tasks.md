@@ -168,13 +168,25 @@ Completion criterion: repositories correctly read and write the complete book mo
 
 Specification: [Authors and publishers](system_specification.md#authors-and-publishers), [Manage authors and publishers](system_specification.md#manage-authors-and-publishers), [Delete records](system_specification.md#delete-records).
 
-- [ ] **8.1** Implement list/search, get, create, rename, and delete service operations using shared normalization and validation.
-- [ ] **8.2** Reject creation of an existing normalized name and identify the existing record. Reject renaming to another record's name without silently merging records. Allow updating the current record's display spelling when uniqueness is preserved.
-- [ ] **8.3** Keep IDs stable on rename and verify that linked book read results use the updated display name. Verify the visible GUI/API behavior after those interfaces are implemented.
-- [ ] **8.4** Reject deletion of referenced authors or publishers with a useful application error. Delete unreferenced records in a transaction and translate foreign-key failures consistently if a database constraint prevents deletion.
-- [ ] **8.5** Add tests for names differing only by case/spacing, significant accents/punctuation, rename conflicts, unchanged IDs, reference restrictions, successful unreferenced deletion, and rollback on persistence failure.
+- [x] **8.1** Implement list/search, get, create, rename, and delete service operations using shared normalization and validation.
+- [x] **8.2** Reject creation of an existing normalized name and identify the existing record. Reject renaming to another record's name without silently merging records. Allow updating the current record's display spelling when uniqueness is preserved.
+- [x] **8.3** Keep IDs stable on rename and verify that linked book read results use the updated display name. Verify the visible GUI/API behavior after those interfaces are implemented.
+- [x] **8.4** Reject deletion of referenced authors or publishers with a useful application error. Delete unreferenced records in a transaction and translate foreign-key failures consistently if a database constraint prevents deletion.
+- [x] **8.5** Add tests for names differing only by case/spacing, significant accents/punctuation, rename conflicts, unchanged IDs, reference restrictions, successful unreferenced deletion, and rollback on persistence failure.
 
 Completion criterion: author and publisher management enforces one normalized name per record and preserves all book references.
+
+Stage 8 evidence: `AuthorService` and `PublisherService` share `NamedRecordService`, which carries the rules both record types obey: one record per normalized name, an identifier that survives a rename, and no deletion while a book references it. Two copies would risk disagreeing about when two spellings are the same record, which is the worst place for them to differ. A small `NamedRecord` interface in `domain` is what lets the shared logic read `id()` and `name()` from either type.
+
+**Transactions are an injected `TransactionTemplate` rather than `@Transactional`.** The classpath was checked rather than assumed: `spring-tx` carries `ProxyTransactionManagementConfiguration`, but there is no `TransactionAutoConfiguration` anywhere, so Spring Boot 4 does not enable annotation-driven transactions here and `@Transactional` would have been inert — a service that looked transactional and silently was not. The template also lets tests construct a service directly and still get real transactional behaviour, which is what keeps the rollback test from being vacuously green.
+
+Duplicate names are found by a lookup that gives a message naming the existing record, with the unique constraint behind it as the authority if another write lands in between; both paths produce the same `DuplicateRecordException`. Renaming onto another record's name is refused rather than merged, because a merge would silently rewrite which author every linked book refers to and nothing could undo it; respelling a record's own name is allowed, since its normalized name does not change. Deletion counts referencing books for a useful message and treats the foreign key as the real decision, translating a violation into the same refusal so the operator reads the same explanation either way.
+
+Failures neither expected nor explainable go through `DatabaseErrors`, which reports a locked database as `database-busy` rather than as an internal error. Telling those apart needs the driver's own result code, because Spring has no error-code mapping for SQLite and a constraint violation and a lock timeout otherwise arrive as the same uncategorized exception. The classification lives in `persistence.SqliteFailures` as predicates — persistence is the only layer that knows the driver — while turning them into application errors stays in `application`, so persistence does not depend upwards on the error taxonomy.
+
+`./gradlew clean build -Pvaadin.productionMode=true` passes with 423 executed tests, up from 396. Coverage includes names differing only by case or spacing rejected with the existing record named, accents and punctuation producing four separate authors, blank and overlong names, a rename that keeps its identifier and appears on a linked book's read result, a rename conflict leaving both records intact, deletion refused with the book count phrased singular or plural, deletion allowed once the last reference is gone, missing records reported rather than returned empty, independent author and publisher namespaces, and the transaction boundary rolling back a multi-step write. A separate wiring test builds both services through a Spring context against the migrated schema and exercises one end to end, since the hand-constructed tests cannot catch a missing bean or a misplaced transaction manager.
+
+Stage 8 note: the GUI and API behaviour that 8.3 also asks for is verified in stages 12 and 15, once those interfaces exist.
 
 ## 9. Implement cover-image validation and handling
 

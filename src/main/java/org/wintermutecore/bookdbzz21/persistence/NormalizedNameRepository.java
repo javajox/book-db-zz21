@@ -17,13 +17,13 @@ import java.util.Optional;
  *
  * @param <T> the record type this repository returns
  */
-abstract class NormalizedNameRepository<T> {
+public abstract class NormalizedNameRepository<T> {
 
     private final JdbcTemplate jdbc;
     private final String table;
     private final RowMapper<T> rowMapper;
 
-    NormalizedNameRepository(JdbcTemplate jdbc, String table) {
+    protected NormalizedNameRepository(JdbcTemplate jdbc, String table) {
         this.jdbc = jdbc;
         this.table = table;
         this.rowMapper = (results, rowNumber) ->
