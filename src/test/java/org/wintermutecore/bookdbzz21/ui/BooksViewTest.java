@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.wintermutecore.bookdbzz21.application.AuthorService;
 import org.wintermutecore.bookdbzz21.application.BookService;
+import org.wintermutecore.bookdbzz21.application.PublisherService;
 import org.wintermutecore.bookdbzz21.domain.BookSummary;
 import org.wintermutecore.bookdbzz21.domain.identity.BookIdGenerator;
 import org.wintermutecore.bookdbzz21.persistence.AuthorRepository;
@@ -15,6 +16,7 @@ import org.wintermutecore.bookdbzz21.persistence.PublisherRepository;
 import org.wintermutecore.bookdbzz21.testsupport.AuthorFixtures;
 import org.wintermutecore.bookdbzz21.testsupport.BookFixtures;
 import org.wintermutecore.bookdbzz21.testsupport.IsbnFixtures;
+import org.wintermutecore.bookdbzz21.testsupport.RecordingNotifier;
 import org.wintermutecore.bookdbzz21.testsupport.TestDatabase;
 
 import java.nio.file.Path;
@@ -56,9 +58,10 @@ class BooksViewTest {
         bookService = new BookService(books, authors, publishers,
                 new BookIdGenerator(), database.transactionManager());
         authorService = new AuthorService(authors, database.transactionManager());
+        var publisherService = new PublisherService(publishers, database.transactionManager());
         ui = new UI();
         UI.setCurrent(ui);
-        view = new BooksView(bookService);
+        view = new BooksView(bookService, authorService, publisherService, new RecordingNotifier());
     }
 
     @AfterEach
