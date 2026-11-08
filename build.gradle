@@ -31,6 +31,9 @@ dependencies {
     developmentOnly 'com.vaadin:vaadin-dev'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // The driver stays off the production compile classpath, but tests configure SQLite
+    // connections directly through SQLiteConfig, so they need it at compile time.
+    testImplementation 'org.xerial:sqlite-jdbc'
 }
 
 dependencyManagement {
@@ -42,6 +45,46 @@ dependencyManagement {
 tasks.named('test') {
     useJUnitPlatform()
     jvmArgs '--enable-native-access=ALL-UNNAMED'
+    // Image fixtures encode real PNG/JPEG bytes through ImageIO, which must not try to reach a display.
+    systemProperty 'java.awt.headless', 'true'
+}
+
+// A green build that silently ran no tests is not verification. Gradle reports `test NO-SOURCE`
+// when it discovers nothing, and that reads exactly like success in CI output. This task reads the
+// JUnit XML results and fails when the executed count is zero, so test discovery breaking is
+// always a build failure rather than a quiet one.
+tasks.register('verifyTestsExecuted') {
+    description = 'Fails the build when the test task executed no tests at all.'
+    group = 'verification'
+    dependsOn tasks.named('test')
+
+    // Deliberately not declared as a task input. The whole point of this task is to run when the
+    // results directory is missing or empty, which is exactly when an input declaration would fail
+    // the build with Gradle's own "input file does not exist" error instead of the diagnostic below.
+    def resultsDirectory = layout.buildDirectory.dir('test-results/test')
+
+    doLast {
+        def directory = resultsDirectory.get().asFile
+        def reports = directory.listFiles({ file ->
+            file.name.startsWith('TEST-') && file.name.endsWith('.xml')
+        } as FileFilter) ?: []
+
+        def executed = reports.sum { report ->
+            (new groovy.xml.XmlSlurper().parse(report).@tests).toString() as int
+        } ?: 0
+
+        if (executed == 0) {
+            throw new GradleException(
+                    "No tests were executed. Gradle found ${reports.size()} JUnit result files in " +
+                    "${directory}. Check that test classes are under src/test/java and that the " +
+                    'JUnit Platform is configured; a `test NO-SOURCE` build verifies nothing.')
+        }
+        logger.lifecycle("Verified ${executed} executed tests across ${reports.size()} test classes.")
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifyTestsExecuted')
 }
 
 tasks.named('bootRun') {
