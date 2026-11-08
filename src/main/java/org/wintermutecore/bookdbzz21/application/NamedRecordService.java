@@ -35,12 +35,13 @@ import java.util.function.Supplier;
  *
  * @param <T> the record type being managed
  */
-abstract class NamedRecordService<T extends NamedRecord> {
+public abstract class NamedRecordService<T extends NamedRecord> {
 
     private final NormalizedNameRepository<T> repository;
     private final TransactionTemplate transactions;
 
-    NamedRecordService(NormalizedNameRepository<T> repository, TransactionTemplate transactions) {
+    protected NamedRecordService(
+            NormalizedNameRepository<T> repository, TransactionTemplate transactions) {
         this.repository = repository;
         this.transactions = transactions;
     }

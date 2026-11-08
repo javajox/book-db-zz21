@@ -266,14 +266,26 @@ A real bug was found and fixed while checking number formats: a 100 kg book stor
 
 Specification: [Manage authors and publishers](system_specification.md#manage-authors-and-publishers), [Form behavior and validation](system_specification.md#form-behavior-and-validation).
 
-- [ ] **12.1** Replace the placeholder landing view with navigation to books, authors, and publishers. Implement the views in Vaadin Flow and call application services directly.
-- [ ] **12.2** Add separate author and publisher browse/search views with add, edit, and delete actions. Identify records by their internal IDs while displaying names.
-- [ ] **12.3** Implement name forms with required indicators, specified length limits, Save and Cancel actions, and server-provided field errors. Retain input on validation or persistence failure.
-- [ ] **12.4** Show an existing record when a duplicate name is rejected and prevent duplicate creation or accidental merges. Refresh lists and book selections after a successful save.
-- [ ] **12.5** Require deletion confirmation identifying the selected record. Explain why referenced records cannot be deleted, allow valid unreferenced deletion, and leave data unchanged after cancellation or failure.
+- [x] **12.1** Replace the placeholder landing view with navigation to books, authors, and publishers. Implement the views in Vaadin Flow and call application services directly.
+- [x] **12.2** Add separate author and publisher browse/search views with add, edit, and delete actions. Identify records by their internal IDs while displaying names.
+- [x] **12.3** Implement name forms with required indicators, specified length limits, Save and Cancel actions, and server-provided field errors. Retain input on validation or persistence failure.
+- [x] **12.4** Show an existing record when a duplicate name is rejected and prevent duplicate creation or accidental merges. Refresh lists and book selections after a successful save.
+- [x] **12.5** Require deletion confirmation identifying the selected record. Explain why referenced records cannot be deleted, allow valid unreferenced deletion, and leave data unchanged after cancellation or failure.
 - [ ] **12.6** Verify the management flows in the browser, including name search, duplicate names, rename visibility on linked books, rejected referenced deletion, successful unreferenced deletion, and correct success/error notifications.
 
 Completion criterion: operators can manage reusable authors and publishers entirely through the GUI with the specified validation and deletion restrictions.
+
+Stage 12 evidence: `MainLayout` carries navigation to books, authors and publishers, replacing the placeholder landing view. `AuthorsView` and `PublishersView` share `NamedRecordView`, which holds no rules of its own: every judgement about validity, duplication and deletion belongs to the service, and the view only asks and then shows the answer. A second copy of those judgements in the GUI is exactly how a screen ends up disagreeing with the API about the same record. The grid displays names while every action carries the selected record's identifier, so acting on one cannot affect another spelled similarly. `BooksView` establishes the landing route and the single search field; its details view, form, cover upload and deletion are stage 13.
+
+Notifications go through a `Notifier` interface rather than direct `Notification.show` calls. Two specification requirements — that a success confirmation appear only after a save succeeded, and that a failure be explained rather than swallowed — are claims about notifications, and they cannot be asserted at all if the only way to produce one is a static call needing a live browser session. A `RecordingNotifier` lets a test read back exactly what the operator would have been told.
+
+A rejected save keeps the dialog open with the typed value intact and attaches the message to the field that caused it. For a duplicate, the message names the existing record, because the operator has to be able to find it rather than merely be told one exists. Deletion uses a dialog that names the record being deleted, since "delete this author?" invites a mistake that cannot be undone, and a refused deletion reports how many books stand in the way.
+
+`./gradlew clean build -Pvaadin.productionMode=true` passes with 527 executed tests, up from 507. The 20 new tests drive the views headlessly — Vaadin components hold their own state, so a view can be constructed, typed into and clicked with only a current `UI` present — covering search filtering and its normalization, actions unavailable without a selection, the required indicator and length limit, a save that confirms only afterwards, blank and overlong names keeping the form open with input intact, Cancel changing nothing, a duplicate naming the existing record, a rename refused rather than merged, respelling a record's own name, the list refreshing after a save, the deletion prompt naming the record, cancellation leaving it, successful deletion of an unreferenced record, and a referenced record explaining itself. The packaged JAR was also run: `/`, `/authors` and `/publishers` each serve HTML with status 200, `/books-brief` and `/books-full` still serve JSON, and startup logged no errors.
+
+**12.6 is deliberately left unchecked.** The tests above drive component state, not a browser: layout, rendering, and real click and keyboard behaviour are outside what they can see, and no browser pass has been performed. What remains is to open the GUI and confirm by eye: name search, a duplicate name showing the existing record, a rename appearing on linked books, a refused deletion of a referenced record, a successful deletion of an unreferenced one, and that success and error notifications appear as intended. Stage 18's acceptance workflow covers the same ground and is the natural place to record it.
+
+A test flake was found and fixed rather than tolerated. One test per run failed to open a dialog, varying with method order. The cause is that Vaadin holds the current UI in a `WeakReference`, so a UI referenced only by the thread-local can be collected between a setup method and the test body; the tests now hold a strong reference.
 
 ## 13. Build book browse, detail, create, edit, and delete workflows
 
