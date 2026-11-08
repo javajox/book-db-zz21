@@ -24,16 +24,15 @@ dependencies {
     // Persistence versions are pinned by the Spring Boot 4.1.0 BOM.
     implementation 'org.springframework:spring-jdbc'
     implementation 'org.flywaydb:flyway-core'
-    runtimeOnly 'org.xerial:sqlite-jdbc'
+    // A compile dependency since stage 5: the data-source configuration sets foreign keys, WAL,
+    // and the busy timeout through SQLiteConfig so the driver applies them to every connection.
+    implementation 'org.xerial:sqlite-jdbc'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     developmentOnly 'com.vaadin:vaadin-dev'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    // The driver stays off the production compile classpath, but tests configure SQLite
-    // connections directly through SQLiteConfig, so they need it at compile time.
-    testImplementation 'org.xerial:sqlite-jdbc'
 }
 
 dependencyManagement {

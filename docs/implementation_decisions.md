@@ -9,13 +9,15 @@ Keep Java 25, Spring Boot 4.1.0, Vaadin 25.2.5, and Gradle Wrapper 9.6.1. The Sp
 | Component | Dependency | Selected version | Purpose |
 |-----------|------------|------------------|---------|
 | Spring JDBC | `org.springframework:spring-jdbc` | `7.0.8` | Blocking SQL access and JDBC transaction support. |
-| SQLite JDBC | `org.xerial:sqlite-jdbc` | `3.53.2.0` | SQLite driver and bundled native libraries; runtime dependency. |
+| SQLite JDBC | `org.xerial:sqlite-jdbc` | `3.53.2.0` | SQLite driver and bundled native libraries. |
 | Flyway | `org.flywaydb:flyway-core` | `12.4.0` | Versioned SQL migrations, with SQLite support included in core. |
 | Validation starter | `org.springframework.boot:spring-boot-starter-validation` | `4.1.0` | Jakarta validation integration for future form/service inputs. |
 | Hibernate Validator | `org.hibernate.validator:hibernate-validator` | `9.1.0.Final` | Validation implementation selected by the Boot BOM. |
 | Test starter | `org.springframework.boot:spring-boot-starter-test` | `4.1.0` | Existing JUnit Jupiter, AssertJ, and Spring test support. |
 
 Flyway's SQLite implementation is present in `flyway-core`; no separate database plugin or database server is required. Use versioned SQL files and let migration exceptions propagate through Spring initialization so an unsuccessful migration prevents startup.
+
+The SQLite driver was a `runtimeOnly` dependency through stage 4, when nothing compiled against it. Stage 5 promoted it to `implementation`, because the data-source configuration sets foreign keys, WAL journaling, and the busy timeout through `SQLiteConfig` so that the driver applies them as it opens each connection. The alternative was to express those settings as JDBC URL parameters and keep the driver off the compile classpath, which would leave a mistyped pragma name to be ignored in silence; a typed configuration is checked by the compiler instead. The project is committed to SQLite throughout the specification, so there is no portability being preserved by holding the driver at arm's length.
 
 Stage 1 adds the core Spring JDBC and Flyway libraries. Production data-source configuration, connection initialization, migration startup integration, and the application schema belong to stages 5 and 6. Using the core libraries at this stage preserves the existing runnable GUI without enabling an unconfigured data-source auto-configuration or creating an application database prematurely. No auto-configuration exclusions or temporary in-memory database are introduced.
 
