@@ -47,14 +47,9 @@ These are library integration checks. The fixtures contain only a small probe ta
 
 Run the checks with `./gradlew test`. Verify production packaging with `./gradlew clean build -Pvaadin.productionMode=true`.
 
-- Allowed book deletion, rejected deletion of referenced authors/publishers, and allowed deletion of unreferenced records.
-- The exact JSON keys, value types, nulls, empty arrays, and error responses of both API endpoints.
-
-A release smoke test must start the production JAR, open the GUI, create and edit a book with a cover image, retrieve it through both endpoints, and confirm that its data, ID, relationships, and image survive an application restart. It must also verify deletion behavior and restoration from a database backup.
-
 ## Initial deployment and access policy
 
-The initial deployment plan uses one private Linux host and exposes the embedded Spring Boot web server directly from the executable JAR. It also uses an operator GUI login and a separate bearer token for API reads. When HTTPS is required, TLS is configured directly in Spring Boot using certificate material stored outside the JAR and repository. Credential provisioning, external storage, and access boundaries are defined in [Implementation decisions](implementation_decisions.md#initial-deployment-and-access-policy). Implement and verify these controls in stage 14 before network deployment; selecting the policy in stage 1 does not enable it in the starter application.
+This section is the authoritative record of the policy summarized in [Verification and remaining decisions](system_specification.md#verification-and-remaining-decisions). The table below defines the initial hosting arrangement, GUI operator authentication, and API access policy. Implement and verify these controls in stage 14 before network deployment; selecting the policy in stage 1 does not enable them in the starter application.
 
 | Area | Decision |
 |------|----------|
