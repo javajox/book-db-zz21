@@ -21,6 +21,12 @@ The SQLite driver was a `runtimeOnly` dependency through stage 4, when nothing c
 
 Stage 1 adds the core Spring JDBC and Flyway libraries. Production data-source configuration, connection initialization, migration startup integration, and the application schema belong to stages 5 and 6. Using the core libraries at this stage preserves the existing runnable GUI without enabling an unconfigured data-source auto-configuration or creating an application database prematurely. No auto-configuration exclusions or temporary in-memory database are introduced.
 
+Spring Boot DevTools needs one auto-configuration excluded, in `src/main/resources/application.properties`. Its `DevToolsDataSourceAutoConfiguration` exists to keep an in-memory development database alive across restarts, and its condition class references `org.springframework.boot.jdbc.autoconfigure.DataSourceProperties` — a class in Spring Boot 4's separate `spring-boot-jdbc` module, which this project does not use because it configures its own SQLite data source on plain `spring-jdbc`. With that module absent the condition cannot be evaluated at all, and startup fails during context initialization with `IllegalStateException: Could not evaluate condition on ... DevToolsDataSourceAutoConfiguration`.
+
+This affects every development run — an IDE launch and `./gradlew bootRun` alike — while the executable JAR is unaffected, since the Spring Boot plugin excludes DevTools from it. The failure therefore does not appear in any packaged smoke test, which is why it went unnoticed until the application was first started from an IDE.
+
+Excluding that one auto-configuration keeps DevTools' restart-on-change and discards a feature that is meaningless here: the database is a file on disk, not an in-memory one needing rescue between restarts. The exclusion is harmless in production, because Spring Boot ignores an exclusion naming a class that is not on the classpath; both paths were verified after the change.
+
 Spring Boot DevTools and Vaadin development tooling remain `developmentOnly`. JUnit and the migration fixtures remain test-only. SQLite uses native code, so Gradle's `test` and `bootRun` tasks enable native access for classpath libraries on Java 25. Packaged startup instructions should include the same JVM option:
 
 ```bash
