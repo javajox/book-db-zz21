@@ -365,6 +365,46 @@ class BookRepositoryTest {
         assertThat(books.search("   ")).hasSize(2);
     }
 
+    // Cover storage
+
+    @Test
+    void storesCoverBytesRawRatherThanBase64Encoded() {
+        var cover = ImageFixtures.jpegCover();
+        var id = insert("dune-7k3m9x", BookFixtures.minimal(herbert), IsbnIdentity.none(), cover);
+
+        var storedBytes = database.jdbc().queryForObject(
+                "SELECT cover_image FROM books WHERE id = ?", byte[].class, id);
+
+        // Base64 would be about a third larger and consist only of printable ASCII. Confirming the
+        // stored column is neither is what pins "Base64 is for JSON serialization only".
+        var base64 = java.util.Base64.getEncoder().encode(cover.data());
+        assertThat(storedBytes).isEqualTo(cover.data()).isNotEqualTo(base64);
+        assertThat(storedBytes.length).isEqualTo(cover.sizeInBytes()).isLessThan(base64.length);
+
+        var hasNonAsciiByte = false;
+        for (var value : storedBytes) {
+            if (value < 0) {
+                hasNonAsciiByte = true;
+                break;
+            }
+        }
+        assertThat(hasNonAsciiByte)
+                .describedAs("raw JPEG bytes include values outside printable ASCII")
+                .isTrue();
+    }
+
+    @Test
+    void returnsCoverBytesIdenticalToWhatValidationAccepted() {
+        var uploaded = ImageFixtures.pngBytes();
+        var validated = org.wintermutecore.bookdbzz21.application.CoverImageValidator
+                .validate(uploaded);
+        var id = insert("dune-7k3m9x", BookFixtures.minimal(herbert), IsbnIdentity.none(), validated);
+
+        // Upload, validation, storage and read back must all agree byte for byte, or the API's
+        // Base64 payload would not reproduce the operator's file.
+        assertThat(books.findById(id).orElseThrow().coverImage().data()).isEqualTo(uploaded);
+    }
+
     // Duplicate lookups
 
     @Test

@@ -192,13 +192,23 @@ Stage 8 note: the GUI and API behaviour that 8.3 also asks for is verified in st
 
 Specification: [Cover images](system_specification.md#cover-images).
 
-- [ ] **9.1** Accept JPEG and PNG input with a maximum original size of 5 MiB (5,242,880 bytes). Enforce the bound during upload handling and verify it on the server.
-- [ ] **9.2** Inspect actual bytes, confirm the image can be decoded, and determine the validated `image/jpeg` or `image/png` media type. Reject empty, corrupt, unsupported, oversized, or falsely labelled input.
-- [ ] **9.3** Preserve the validated original bytes for BLOB storage. Define keep, replace, and remove actions so editing another book field cannot accidentally clear a cover.
-- [ ] **9.4** Prepare image preview data without prematurely persisting the book or creating persistent image files outside SQLite. Retain pending image input after a rejected save so the operator can retry; discard temporary uploads when the operator cancels or abandons the form.
-- [ ] **9.5** Test accepted formats, size boundaries, invalid content, mismatched extensions/types, and byte preservation. Verify that Base64 encoding is reserved for API serialization rather than database storage.
+- [x] **9.1** Accept JPEG and PNG input with a maximum original size of 5 MiB (5,242,880 bytes). Enforce the bound during upload handling and verify it on the server.
+- [x] **9.2** Inspect actual bytes, confirm the image can be decoded, and determine the validated `image/jpeg` or `image/png` media type. Reject empty, corrupt, unsupported, oversized, or falsely labelled input.
+- [x] **9.3** Preserve the validated original bytes for BLOB storage. Define keep, replace, and remove actions so editing another book field cannot accidentally clear a cover.
+- [x] **9.4** Prepare image preview data without prematurely persisting the book or creating persistent image files outside SQLite. Retain pending image input after a rejected save so the operator can retry; discard temporary uploads when the operator cancels or abandons the form.
+- [x] **9.5** Test accepted formats, size boundaries, invalid content, mismatched extensions/types, and byte preservation. Verify that Base64 encoding is reserved for API serialization rather than database storage.
 
 Completion criterion: cover inputs are validated and ready to participate in book transactions, with distinct keep/replace/remove behavior.
+
+Stage 9 evidence: `CoverImageValidator` takes bytes and nothing else — no filename, no browser-supplied content type — so there is no declared label to be wrong about. The media type stored beside the image is the one a decoder recognized, which makes the `content-type` the API reports a fact about the file rather than a claim about it. A declared type is consequently never a reason to reject: a PNG arriving as `cover.jpg` is stored as the PNG it is, while a text file renamed `cover.png` is rejected for not decoding.
+
+Checks run cheapest first: size, then whether any decoder recognizes the format, then the format against JPEG and PNG, then the dimensions from the header, then a full decode. A GIF is the case that separates "decodable" from "allowed" — the JDK ships a GIF reader, so it decodes perfectly and is still refused.
+
+Two guards go beyond the letter of the specification. **A pixel-count limit of 50 megapixels**, because a compressed file inside the 5 MiB bound can still describe an enormous raster: a 33-byte hand-built PNG header claiming 9000 by 7000 pixels would need roughly 250 MB to decode, and in a single process that takes the API down along with the GUI. The dimensions are read from the header before any pixels are touched, and the bound is far beyond any plausible book cover. **And `MemoryCacheImageInputStream` rather than `ImageIO.createImageInputStream`**, which was verified to return a `FileCacheImageInputStream` and write every upload into `java.io.tmpdir`; that would have contradicted the requirement that cover handling creates no image files outside SQLite, and a test now points ImageIO's cache at a directory it controls and asserts it stays empty.
+
+`PendingCover` holds a form's intent in memory: keep by default so editing a page count cannot clear a cover, with replace and remove as explicit choices. It validates on upload rather than at save time, so an unusable file is reported while the operator still has it in front of them; a rejected save leaves the pending image untouched, and a failed second upload does not destroy an already-chosen valid one. `reset` is what Cancel calls. Nothing is written anywhere until the book is saved, so an abandoned form is just a dropped object.
+
+`./gradlew clean build -Pvaadin.productionMode=true` passes with 453 executed tests, up from 423. Coverage includes both accepted formats with their real media types, an image of exactly the size limit, one byte beyond it, empty and absent uploads, a file that is not an image, a truncated PNG whose signature still looks valid, a decodable GIF, the oversized-raster header, bytes preserved unchanged rather than re-encoded, no temporary file written, and every keep/replace/remove and cancel transition. Two repository tests confirm that the stored BLOB is raw bytes — shorter than their Base64 form and containing values outside printable ASCII — so Base64 remains reserved for API serialization.
 
 ## 10. Implement transactional book application services
 

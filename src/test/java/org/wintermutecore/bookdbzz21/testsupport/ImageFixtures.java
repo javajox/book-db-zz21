@@ -10,8 +10,10 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.zip.CRC32;
 
 /**
  * Cover-image fixtures.
@@ -70,6 +72,47 @@ public final class ImageFixtures {
     /** Bytes that are not an image in any format. */
     public static byte[] notAnImageBytes() {
         return "This is a text file, not an image.".getBytes(StandardCharsets.UTF_8);
+    }
+
+    /**
+     * A decodable GIF.
+     *
+     * <p>The JDK ships a GIF reader, so this is a real image that decodes perfectly and must still
+     * be rejected — which separates "can this be decoded" from "is this an allowed format".
+     */
+    public static byte[] gifBytes() {
+        return encode("gif", 24, 32);
+    }
+
+    /**
+     * A PNG header declaring enormous dimensions, with no image data behind it.
+     *
+     * <p>Hand-built rather than generated, because actually encoding a fifty-megapixel image would
+     * cost hundreds of megabytes and several seconds per test run. A decoder reads the dimensions
+     * from this header, which is all the pixel-count guard needs to see; the point of the fixture is
+     * that a small file can describe a raster far too large to decode safely.
+     */
+    public static byte[] hugeDimensionsPngBytes(int width, int height) {
+        var ihdr = ByteBuffer.allocate(17)
+                .put("IHDR".getBytes(StandardCharsets.US_ASCII))
+                .putInt(width)
+                .putInt(height)
+                .put((byte) 8)   // bit depth
+                .put((byte) 2)   // colour type: truecolour
+                .put((byte) 0)   // compression
+                .put((byte) 0)   // filter
+                .put((byte) 0)   // interlace
+                .array();
+
+        var crc = new CRC32();
+        crc.update(ihdr);
+
+        return ByteBuffer.allocate(8 + 4 + ihdr.length + 4)
+                .put(new byte[] {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A})
+                .putInt(ihdr.length - 4)   // chunk length excludes the type
+                .put(ihdr)
+                .putInt((int) crc.getValue())
+                .array();
     }
 
     /** An empty upload. */
