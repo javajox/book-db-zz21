@@ -2,6 +2,7 @@ package org.wintermutecore.bookdbzz21.application.validation;
 
 import org.wintermutecore.bookdbzz21.application.error.ValidationException;
 import org.wintermutecore.bookdbzz21.domain.BookAttributes;
+import org.wintermutecore.bookdbzz21.domain.ValidatedBookAttributes;
 
 /**
  * Validates a complete set of submitted book attributes.

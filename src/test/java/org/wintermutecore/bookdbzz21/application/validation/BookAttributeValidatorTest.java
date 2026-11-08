@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.wintermutecore.bookdbzz21.application.error.FieldError;
 import org.wintermutecore.bookdbzz21.application.error.ValidationException;
 import org.wintermutecore.bookdbzz21.domain.BookAttributes;
+import org.wintermutecore.bookdbzz21.domain.ValidatedBookAttributes;
 import org.wintermutecore.bookdbzz21.testsupport.BookFixtures;
 
 import java.math.BigDecimal;

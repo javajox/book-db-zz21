@@ -1,4 +1,4 @@
-package org.wintermutecore.bookdbzz21.application.validation;
+package org.wintermutecore.bookdbzz21.domain;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -13,9 +13,13 @@ import java.util.Set;
  * empty are {@code null} rather than empty strings or zeros, numbers are positive, and the keyword
  * string is deduplicated and joined. Repositories can store these values directly.
  *
- * <p>ISBN values are deliberately absent. Their checksums, the equivalence between the two forms,
- * and the canonical identity derived from them are the identity rules of stage 4, so a type claiming
- * to hold validated attributes should not carry an ISBN that nothing has checked yet.
+ * <p>ISBN values are deliberately absent. They are validated separately and carried as an
+ * {@link org.wintermutecore.bookdbzz21.domain.identity.IsbnIdentity}, which keeps the two public
+ * ISBN attributes distinct from the internal edition identity derived from them.
+ *
+ * <p>This type sits in {@code domain} rather than beside the validators that produce it, because
+ * the repositories consume it too. Placing it in {@code application.validation} would make
+ * {@code persistence} depend upwards on the application layer.
  *
  * @param title normalized, nonblank, at most 50 characters
  * @param authorIds at least one author reference

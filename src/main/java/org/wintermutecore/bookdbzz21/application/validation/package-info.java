@@ -8,8 +8,9 @@
  * <p>Validation does two jobs at once, which is why the validators return a value rather than just a
  * verdict: they decide whether input is acceptable, and they produce the normalized value that will
  * actually be stored. A caller that holds a
- * {@link org.wintermutecore.bookdbzz21.application.validation.ValidatedBookAttributes} is holding
- * values already fit for the database.
+ * {@link org.wintermutecore.bookdbzz21.domain.ValidatedBookAttributes} is holding values already fit
+ * for the database. That type lives in {@code domain} rather than here because the repositories
+ * consume it as well, and a persistence dependency on this package would invert the layering.
  *
  * <p>Failures are accumulated rather than thrown one at a time, so an operator who got three fields
  * wrong is told about all three on the first save instead of discovering them one at a time.
