@@ -28,6 +28,7 @@ dependencies {
     // and the busy timeout through SQLiteConfig so the driver applies them to every connection.
     implementation 'org.xerial:sqlite-jdbc'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
 
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     developmentOnly 'com.vaadin:vaadin-dev'

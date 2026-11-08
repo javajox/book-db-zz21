@@ -13,6 +13,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.wintermutecore.bookdbzz21.application.AuthorService;
 import org.wintermutecore.bookdbzz21.application.BookService;
 import org.wintermutecore.bookdbzz21.application.PublisherService;
+import org.wintermutecore.bookdbzz21.config.CredentialProvisioning;
 import org.wintermutecore.bookdbzz21.testsupport.AuthorFixtures;
 import org.wintermutecore.bookdbzz21.testsupport.BookFixtures;
 import org.wintermutecore.bookdbzz21.testsupport.ImageFixtures;
@@ -60,10 +61,26 @@ class BookApiContractTest {
     @TempDir
     static Path databaseDirectory;
 
+    /**
+     * The API token this test authenticates with.
+     *
+     * <p>The application stores only a digest, so the test holds the token and configures the
+     * digest of it — exactly the split a real deployment uses, which also means the test would fail
+     * if the application ever started accepting something other than the real token.
+     */
+    private static final String API_TOKEN = "contract-test-token-Zx9QpL2mN4";
+
     @DynamicPropertySource
-    static void useATemporaryDatabase(DynamicPropertyRegistry registry) {
+    static void configureDeployment(DynamicPropertyRegistry registry) {
         // Never the operator's configured database, and never the project's ./data default.
         registry.add("bookdb.database.path", () -> databaseDirectory.resolve("books.db").toString());
+        // The application refuses to start without credentials, so a context test has to provision
+        // them just as a deployment would.
+        registry.add("bookdb.security.operator-username", () -> "operator");
+        registry.add("bookdb.security.operator-password-hash",
+                () -> CredentialProvisioning.hashPassword("contract-test-password"));
+        registry.add("bookdb.security.api-token-digest",
+                () -> CredentialProvisioning.sha256Hex(API_TOKEN));
     }
 
     @LocalServerPort
@@ -322,6 +339,70 @@ class BookApiContractTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM books", Integer.class)).isEqualTo(1);
     }
 
+    // Access control
+
+    @Test
+    void refusesAnApiReadWithNoTokenAndSaysSoInJson() {
+        for (var path : List.of("/books-brief", "/books-full")) {
+            var response = get(path, null);
+
+            assertThat(response.statusCode()).describedAs(path).isEqualTo(401);
+            // Never a redirect to the login page: an integration following one would receive HTML
+            // with a 200 and could not tell it from data.
+            assertThat(response.headers().firstValue("location")).isEmpty();
+            assertThat(response.headers().firstValue("content-type"))
+                    .get(org.assertj.core.api.InstanceOfAssertFactories.STRING)
+                    .contains("application/json");
+            assertThat(response.body())
+                    .contains("\"error-code\":\"unauthorized\"")
+                    .doesNotContain("<html");
+        }
+    }
+
+    @Test
+    void refusesAnApiReadWithTheWrongOrMalformedToken() {
+        for (var header : List.of(
+                "Bearer wrong-token",
+                "Bearer ",
+                "Basic " + Base64.getEncoder().encodeToString("operator:pw".getBytes()),
+                API_TOKEN)) {
+            var response = get("/books-brief", header);
+
+            assertThat(response.statusCode()).describedAs(header).isEqualTo(401);
+        }
+    }
+
+    @Test
+    void anUnauthenticatedBrowserIsSentToTheLoginPage() {
+        var response = get("/", null);
+
+        // The GUI gets the opposite treatment from the API: a redirect, because a person can follow
+        // one and sign in.
+        assertThat(response.statusCode()).isIn(302, 303);
+        assertThat(response.headers().firstValue("location"))
+                .get(org.assertj.core.api.InstanceOfAssertFactories.STRING)
+                .contains("login");
+    }
+
+    @Test
+    void theLoginPageItselfIsReachableWithoutSigningIn() {
+        var response = get("/login", null);
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).doesNotContain("\"error-code\"");
+    }
+
+    @Test
+    void theApiTokenDoesNotOpenTheManagementInterface() {
+        // Leaking the token to an integration partner must not hand them the operator's screens.
+        var response = get("/authors", "Bearer " + API_TOKEN);
+
+        assertThat(response.statusCode()).isIn(302, 303);
+        assertThat(response.headers().firstValue("location"))
+                .get(org.assertj.core.api.InstanceOfAssertFactories.STRING)
+                .contains("login");
+    }
+
     // Helpers
 
     /**
@@ -332,10 +413,17 @@ class BookApiContractTest {
      * mapping actually compete.
      */
     private HttpResponse<String> get(String path) {
+        return get(path, "Bearer " + API_TOKEN);
+    }
+
+    /** Performs a request with an explicit Authorization header, or none when {@code null}. */
+    private HttpResponse<String> get(String path, String authorization) {
         try {
-            return http.send(
-                    HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).GET().build(),
-                    HttpResponse.BodyHandlers.ofString());
+            var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).GET();
+            if (authorization != null) {
+                request.header("Authorization", authorization);
+            }
+            return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();

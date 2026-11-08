@@ -78,6 +78,45 @@ GUI requests without a valid operator session go to the login flow. API requests
 
 The database is not shared over a network filesystem and multiple application instances are not supported. Simultaneous-operator conflict handling, edit locks, public write APIs, and API pagination/filtering/sorting remain outside the first release.
 
+### How the policy is implemented
+
+Stage 14 implemented the above. The configuration contract adds three required settings, supplied the same three ways as the database settings — configuration file, environment variables, or command-line arguments:
+
+| Property | Meaning |
+|----------|---------|
+| `bookdb.security.operator-username` | The single provisioned operator account. |
+| `bookdb.security.operator-password-hash` | That account's BCrypt password hash. |
+| `bookdb.security.api-token-digest` | The SHA-256 digest, in lowercase hexadecimal, of the API bearer token. |
+
+All three are required and there is no built-in account: a missing or malformed value fails startup with a message naming the provisioning command. This is deliberate and is the point of the arrangement — a deployment that refuses to start is a problem someone fixes in a minute, while one that starts unsecured is a problem nobody notices. Both values are stored only in derived form, so the configuration file never holds a credential that could be replayed, and both are checked for shape as well as presence because the realistic mistake is pasting the plain password or the raw token into the property and believing it was secured.
+
+Provision them on the deployment host from the same artifact:
+
+```bash
+java -jar book-db-zz21.jar provision-credentials operator
+```
+
+The tool prompts for the password rather than accepting it as an argument, since an argument is visible to every process listing on the host and lands in shell history. It prints the three property lines plus a freshly generated token from 32 cryptographically random bytes; the token is shown once and cannot be recovered from the stored digest.
+
+Two filter chains serve the two audiences. The API chain matches only `/books-brief` and `/books-full`, is stateless, authenticates the `Authorization: Bearer` header by comparing SHA-256 digests with a constant-time comparison, and answers an unauthenticated request with HTTP `401` and the `unauthorized` JSON error defined in the API contract — never a redirect. The GUI chain uses Vaadin's `VaadinSecurityConfigurer`, which keeps Vaadin's internal requests, framework resources and CSRF handling working while every route is access-checked; route access is expressed as annotations on the views, with `@AnonymousAllowed` on the login view alone and `@PermitAll` on the operator views, so a new view with no annotation fails closed rather than being published. The API token grants nothing in the GUI: presenting it to `/authors` still redirects to the login page.
+
+### HTTPS and reverse proxies
+
+TLS is configured directly in Spring Boot, with certificate material outside the JAR and outside version control:
+
+```bash
+java -jar book-db-zz21.jar \
+  --server.ssl.enabled=true \
+  --server.ssl.key-store=/etc/book-db-zz21/bookdb.p12 \
+  --server.ssl.key-store-type=PKCS12 \
+  --server.ssl.key-store-password=... \
+  --server.ssl.key-alias=bookdb
+```
+
+This was verified with a generated PKCS12 keystore: the server reported `Tomcat started on port 18443 (https)`, negotiated TLSv1.3, and every access rule held over TLS — the GUI redirected to the login page, the login page served, the API returned `401` without a token and `200` with one.
+
+The initial deployment exposes the embedded server directly, so no reverse proxy is involved. If one is introduced later and terminates TLS, set `server.forward-headers-strategy=framework` so Spring and Vaadin build absolute URLs and redirects from the forwarded headers rather than from the internal connection; without it a redirect to the login page can point at `http` or at the internal port. A proxy must also forward WebSocket upgrade headers if Vaadin push is ever enabled, and `.p12`, `.jks` and `.key` files are already covered by the repository ignore rules.
+
 ## Local files and version control
 
 Use the ignored root directories `data/`, `backups/`, and `logs/` for local runtime files. Use `config/`, `secrets/`, or ignored `.env`/`*.local.properties`/`*.local.yml`/`*.local.yaml` files for deployment settings and credentials. Environment files must be loaded by the deployment tooling; Spring Boot does not automatically read `.env` files.

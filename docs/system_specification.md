@@ -250,7 +250,7 @@ Example `/books-full` response:
 
 When a cover exists, `cover-image` is an object with exactly two keys: `content-type`, containing `image/jpeg` or `image/png`, and `data`, containing the complete image bytes encoded as standard Base64 with padding and without line breaks or a data-URL prefix. The brief endpoint never includes image data.
 
-If an API request fails, return a JSON error object with exactly `error-code` and `message`. Use HTTP `500` with `internal-error` for unexpected failures, or HTTP `503` with `database-busy` when database lock waiting exceeds the configured timeout. Messages must be suitable for consumers and must not expose stack traces, SQL, or database paths. For example:
+If an API request fails, return a JSON error object with exactly `error-code` and `message`. Use HTTP `401` with `unauthorized` when the request carries no valid API token, HTTP `500` with `internal-error` for unexpected failures, or HTTP `503` with `database-busy` when database lock waiting exceeds the configured timeout. An unauthenticated API request must never be answered with a redirect or with the GUI's HTML login page, because a consumer following a redirect would receive HTML with a success status and could not distinguish it from data. Messages must be suitable for consumers and must not expose stack traces, SQL, or database paths. For example:
 
 ```json
 {

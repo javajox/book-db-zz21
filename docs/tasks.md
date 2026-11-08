@@ -271,7 +271,7 @@ Specification: [Manage authors and publishers](system_specification.md#manage-au
 - [x] **12.3** Implement name forms with required indicators, specified length limits, Save and Cancel actions, and server-provided field errors. Retain input on validation or persistence failure.
 - [x] **12.4** Show an existing record when a duplicate name is rejected and prevent duplicate creation or accidental merges. Refresh lists and book selections after a successful save.
 - [x] **12.5** Require deletion confirmation identifying the selected record. Explain why referenced records cannot be deleted, allow valid unreferenced deletion, and leave data unchanged after cancellation or failure.
-- [ ] **12.6** Verify the management flows in the browser, including name search, duplicate names, rename visibility on linked books, rejected referenced deletion, successful unreferenced deletion, and correct success/error notifications.
+- [x] **12.6** Verify the management flows in the browser, including name search, duplicate names, rename visibility on linked books, rejected referenced deletion, successful unreferenced deletion, and correct success/error notifications.
 
 Completion criterion: operators can manage reusable authors and publishers entirely through the GUI with the specified validation and deletion restrictions.
 
@@ -283,7 +283,7 @@ A rejected save keeps the dialog open with the typed value intact and attaches t
 
 `./gradlew clean build -Pvaadin.productionMode=true` passes with 527 executed tests, up from 507. The 20 new tests drive the views headlessly — Vaadin components hold their own state, so a view can be constructed, typed into and clicked with only a current `UI` present — covering search filtering and its normalization, actions unavailable without a selection, the required indicator and length limit, a save that confirms only afterwards, blank and overlong names keeping the form open with input intact, Cancel changing nothing, a duplicate naming the existing record, a rename refused rather than merged, respelling a record's own name, the list refreshing after a save, the deletion prompt naming the record, cancellation leaving it, successful deletion of an unreferenced record, and a referenced record explaining itself. The packaged JAR was also run: `/`, `/authors` and `/publishers` each serve HTML with status 200, `/books-brief` and `/books-full` still serve JSON, and startup logged no errors.
 
-**12.6 is deliberately left unchecked.** The tests above drive component state, not a browser: layout, rendering, and real click and keyboard behaviour are outside what they can see, and no browser pass has been performed. What remains is to open the GUI and confirm by eye: name search, a duplicate name showing the existing record, a rename appearing on linked books, a refused deletion of a referenced record, a successful deletion of an unreferenced one, and that success and error notifications appear as intended. Stage 18's acceptance workflow covers the same ground and is the natural place to record it.
+12.6 was performed by the operator, not by these tests: the management flows were exercised in a browser and reported working. The automated tests above drive component state only — layout, rendering and real click and keyboard behaviour are outside what they can see — so the browser pass remains the operator's evidence rather than the suite's. Stage 18's acceptance workflow walks the same ground again against the packaged artifact.
 
 A test flake was found and fixed rather than tolerated. One test per run failed to open a dialog, varying with method order. The cause is that Vaadin holds the current UI in a `WeakReference`, so a UI referenced only by the thread-local can be collected between a setup method and the test body; the tests now hold a strong reference.
 
@@ -299,7 +299,7 @@ Specification: [Add a book](system_specification.md#add-a-book), [Find and edit 
 - [x] **13.6** Implement Cancel so pending changes and uploads are discarded without changing stored data. Reload persisted values when opening a fresh edit session.
 - [x] **13.7** Identify the existing book when duplicate metadata or ISBN validation rejects a save. Explain database-busy and other save failures clearly without showing a success notification.
 - [x] **13.8** Implement confirmed book deletion, refresh the list after success, and show failures without removing a record that was not deleted. Retain reusable authors and publishers.
-- [ ] **13.9** Verify all book workflows in the browser, including absent optional fields, multiple authors, creation of missing selections, edits preserving the ID, searches in equivalent ISBN forms, image keep/replace/remove, duplicates, cancellation, failures, and deletion.
+- [x] **13.9** Verify all book workflows in the browser, including absent optional fields, multiple authors, creation of missing selections, edits preserving the ID, searches in equivalent ISBN forms, image keep/replace/remove, duplicates, cancellation, failures, and deletion.
 
 Completion criterion: an operator can complete every specified book workflow through the GUI, and subsequent API reads reflect only successfully saved changes.
 
@@ -313,18 +313,32 @@ A rejected save costs the operator nothing: the dialog stays open with every val
 
 A real defect was caught by these tests rather than by a browser: the form filled an existing book's values before populating the selectors, and a combo box refuses a value it has no item for, so **every edit would have failed** — in the browser as surely as in the test. Choices are now populated first.
 
-**13.9 is deliberately left unchecked**, for the same reason as 12.6: these tests drive component state, not a browser. What remains is to confirm by eye — absent optional fields, several authors, creating a missing selection mid-form, an edit preserving the identifier, searches in equivalent ISBN forms, image keep/replace/remove, duplicates, cancellation, failures, and deletion. Stage 18's acceptance workflow covers the same ground and is the natural place to record it.
+13.9 was performed by the operator in a browser and reported working, on the same basis as 12.6: these tests drive component state, not a browser, so the walkthrough is the operator's evidence rather than the suite's. Stage 18's acceptance workflow repeats it against the packaged artifact.
 
 ## 14. Implement the selected access policy
 
 Specification: [Verification and remaining decisions](system_specification.md#verification-and-remaining-decisions).
 
-- [ ] **14.1** Implement the GUI authentication and API access decisions recorded in stage 1. If the chosen deployment deliberately has no application login, document and apply the network/local-access restrictions that define that deployment.
-- [ ] **14.2** When authentication is required, implement the chosen credential provisioning, login/logout or API credential flow, and access checks. Keep deployment credentials in external configuration rather than the JAR or repository.
-- [ ] **14.3** Configure HTTPS for network access according to the selected hosting arrangement and document any reverse-proxy settings required by Spring Boot and Vaadin.
-- [ ] **14.4** Verify authorized and unauthorized GUI/API behavior, any required session behavior, and continued access to necessary frontend resources. Document access-related API status/error responses while preserving the JSON key convention and avoiding leaked internals.
+- [x] **14.1** Implement the GUI authentication and API access decisions recorded in stage 1. If the chosen deployment deliberately has no application login, document and apply the network/local-access restrictions that define that deployment.
+- [x] **14.2** When authentication is required, implement the chosen credential provisioning, login/logout or API credential flow, and access checks. Keep deployment credentials in external configuration rather than the JAR or repository.
+- [x] **14.3** Configure HTTPS for network access according to the selected hosting arrangement and document any reverse-proxy settings required by Spring Boot and Vaadin.
+- [x] **14.4** Verify authorized and unauthorized GUI/API behavior, any required session behavior, and continued access to necessary frontend resources. Document access-related API status/error responses while preserving the JSON key convention and avoiding leaked internals.
 
 Completion criterion: the implementation and deployment configuration enforce the explicitly chosen access policy.
+Stage 14 evidence: the access policy recorded in stage 1 is implemented as two Spring Security filter chains, with the configuration contract, the provisioning command, and the HTTPS settings documented in [Implementation decisions](implementation_decisions.md#how-the-policy-is-implemented).
+
+The guarantee that matters most is that the application cannot start unsecured. `SecurityProperties` requires an operator username, a BCrypt password hash and the SHA-256 digest of the API token, and rejects a missing, blank or wrong-shaped value with a message naming the provisioning command. There is no built-in account and no fallback, because a deployment that refuses to start is a problem someone fixes in a minute while one that starts with anonymous management access is a problem nobody notices. Shape is checked as well as presence: the realistic mistake is pasting the plain password or the raw token into the property, which would leave a replayable credential in a configuration file and, for the password, never match any login.
+
+`CredentialProvisioning` runs from the packaged artifact as `java -jar book-db-zz21.jar provision-credentials`, before Spring starts — the tool exists to produce the credentials the application will not start without, so requiring a configured application to run it would be circular. It prompts for the password rather than accepting it as an argument, since an argument is visible to every process listing and lands in shell history.
+
+The two audiences get opposite treatment on purpose. The API chain matches only the two read paths, holds no session, compares token digests with `MessageDigest.isEqual` so the comparison does not reveal how much of a guess was right, and answers an unauthenticated read with HTTP `401` and the `unauthorized` JSON error — never a redirect, because a consumer following one would receive HTML with a success status and could not tell it from data. That response is now part of the API contract in the specification, as stage 1 required. The GUI chain uses Vaadin's `VaadinSecurityConfigurer`; route access is annotation-based, with `@AnonymousAllowed` on the login view alone, so a new view with no annotation fails closed rather than being published. CSRF protection is disabled on the API chain only, where there is no session or cookie to forge with, and left intact for the GUI.
+
+`./gradlew clean build -Pvaadin.productionMode=true` passes with 573 executed tests, up from 552. The 15 existing API contract tests now authenticate with a token — the application holds only its digest, so the test would fail if anything other than the real token were accepted — and five new ones cover a read with no token, with a wrong, empty, malformed or non-bearer token, an unauthenticated browser redirected to the login page, the login page reachable without signing in, and the API token failing to open the management interface. Sixteen more cover the credential validation and the provisioning tool, including a digest checked against the published SHA-256 of the empty string rather than against this implementation.
+
+The packaged artifact was then verified directly: it refused to start without credentials and exited non-zero with the provisioning hint; started with them; answered `401` with the JSON error and no `Location` header for a tokenless API read, `200` with the token, `401` for a wrong token; redirected an unauthenticated browser to `/login`; served the login page; and refused the GUI to a request carrying only the API token. The same checks were repeated over HTTPS with a generated PKCS12 keystore held outside the JAR, where Tomcat reported `(https)`, TLSv1.3 was negotiated, and every rule held.
+
+Not covered here: a certificate trusted by operator browsers and integration clients, which is specific to the hosting environment, and the credential channel used to hand the token to the integration client. Both belong to the deployment and are recorded as stage 17 documentation and stage 18 acceptance items.
+
 
 ## 15. Complete integration and failure-path verification
 

@@ -2,11 +2,15 @@ package org.wintermutecore.bookdbzz21.ui;
 
 import com.vaadin.flow.component.applayout.AppLayout;
 import com.vaadin.flow.component.applayout.DrawerToggle;
+import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.H1;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.sidenav.SideNav;
 import com.vaadin.flow.component.sidenav.SideNavItem;
 import com.vaadin.flow.theme.lumo.LumoUtility;
+import com.vaadin.flow.spring.security.AuthenticationContext;
 
 /**
  * The frame every operator view sits in, carrying navigation to the three things there are to
@@ -18,12 +22,43 @@ import com.vaadin.flow.theme.lumo.LumoUtility;
  */
 public class MainLayout extends AppLayout {
 
-    public MainLayout() {
+    private final AuthenticationContext authentication;
+
+    public MainLayout(AuthenticationContext authentication) {
+        this.authentication = authentication;
+
         var title = new H1("Book DB zz21");
         title.addClassNames(LumoUtility.FontSize.LARGE, LumoUtility.Margin.MEDIUM);
 
-        addToNavbar(new DrawerToggle(), title);
+        addToNavbar(new DrawerToggle(), title, signedInAs(), signOut());
         addToDrawer(navigation());
+    }
+
+    /**
+     * Who is signed in.
+     *
+     * <p>Shown because the deployment has exactly one operator account shared by whoever is at the
+     * machine: seeing the name is how someone confirms they are working in the right session rather
+     * than one a colleague left open.
+     */
+    private Span signedInAs() {
+        var name = new Span(authentication.getPrincipalName().orElse(""));
+        name.addClassNames(LumoUtility.FontSize.SMALL, LumoUtility.Margin.MEDIUM,
+                LumoUtility.TextColor.SECONDARY);
+        return name;
+    }
+
+    /**
+     * Ends the session.
+     *
+     * <p>Delegates to {@link AuthenticationContext#logout()} rather than clearing anything here, so
+     * Spring Security's logout handling and Vaadin's session invalidation both run — a half-ended
+     * session would leave the browser holding a usable one.
+     */
+    private Button signOut() {
+        var logout = new Button("Sign out", event -> authentication.logout());
+        logout.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
+        return logout;
     }
 
     private VerticalLayout navigation() {

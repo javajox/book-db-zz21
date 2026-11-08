@@ -1,5 +1,6 @@
 package org.wintermutecore.bookdbzz21.ui;
 
+import jakarta.annotation.security.PermitAll;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import org.wintermutecore.bookdbzz21.application.AuthorService;
@@ -13,6 +14,7 @@ import org.wintermutecore.bookdbzz21.domain.Author;
  * shared by every book that author wrote, and renaming it updates all of them at once.
  */
 @Route(value = "authors", layout = MainLayout.class)
+@PermitAll
 @PageTitle("Authors")
 public class AuthorsView extends NamedRecordView<Author> {
 

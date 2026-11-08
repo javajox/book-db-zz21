@@ -9,6 +9,7 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
+import jakarta.annotation.security.PermitAll;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import org.wintermutecore.bookdbzz21.application.AuthorService;
@@ -34,6 +35,7 @@ import java.util.Optional;
  * searching and should not have to choose a category first.
  */
 @Route(value = "", layout = MainLayout.class)
+@PermitAll
 @PageTitle("Books")
 public class BooksView extends VerticalLayout {
 
