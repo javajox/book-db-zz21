@@ -487,12 +487,18 @@ public class BookRepository {
      *
      * <p>Trailing zeros are stripped so 500 grams reads back as 0.5 rather than 0.500. Both are the
      * same number, but the shorter form is what belongs in a JSON response.
+     *
+     * <p>Stripping can leave a negative scale: 100 000 grams becomes {@code 1E+2}, which a JSON
+     * serializer writes as {@code 1E+2}. That is a legal JSON number and arithmetically correct, but
+     * a weight of {@code 1E+2} in an API response invites misreading, so the scale is brought back
+     * to zero and the value reads {@code 100}.
      */
     private static BigDecimal toKilograms(Integer grams) {
         if (grams == null) {
             return null;
         }
-        return BigDecimal.valueOf(grams, GRAMS_PER_KILOGRAM_SCALE).stripTrailingZeros();
+        var kilograms = BigDecimal.valueOf(grams, GRAMS_PER_KILOGRAM_SCALE).stripTrailingZeros();
+        return kilograms.scale() < 0 ? kilograms.setScale(0) : kilograms;
     }
 
     /** The search text as a normalized ISBN, or {@code null} when it cannot be one. */
