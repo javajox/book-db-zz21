@@ -22,7 +22,7 @@ The table below distinguishes database storage from the public JSON contract. Da
 | Print length | `print_length` | `print-length` | Integer | Required; greater than zero. Number of pages. |
 | ISBN-10 | `isbn_10` | `isbn-10` | String | Optional; exactly 10 characters after normalization, valid ISBN-10 checksum, unique book identity; otherwise `null`. See [ISBN validation](#isbn-validation). |
 | ISBN-13 | `isbn_13` | `isbn-13` | String | Optional; exactly 13 digits after normalization, valid ISBN-13 prefix and checksum, unique book identity; otherwise `null`. See [ISBN validation](#isbn-validation). |
-| Book weight | `weight` | `weight` | Decimal | Optional; greater than zero, at most three decimal places, in kilograms; otherwise `null`. Returned as a JSON number. |
+| Book weight | `weight_grams` | `weight` | Decimal | Optional; greater than zero, at most three decimal places, in kilograms; otherwise `null`. Returned as a JSON number. Stored as whole grams in an integer column, because SQLite has no decimal type and `REAL` cannot return every permitted value unchanged; see [Implementation decisions](implementation_decisions.md#storing-the-weight). |
 | Dimensions | `dimensions` | `dimensions` | String | Optional, max. 50 characters, such as `17.78 x 1.91 x 24.77 cm`; otherwise `null`. |
 | ID | `id` | `id` | String | Required, unique, immutable, system-generated; 8–19 characters. See [Book ID format](#book-id-format). |
 | Keywords | `keywords` | `keywords` | String | Optional comma-separated keywords, max. 500 characters; otherwise `null`. |
