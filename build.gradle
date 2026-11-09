@@ -90,3 +90,14 @@ tasks.named('check') {
 tasks.named('bootRun') {
     jvmArgs '--enable-native-access=ALL-UNNAMED'
 }
+
+// The release is the executable Spring Boot JAR, so that is the only JAR the build produces.
+//
+// Gradle's `jar` task would otherwise also write book-db-zz21-<version>-plain.jar next to it: the
+// application's own classes with an empty manifest, no dependencies, and no Main-Class. It cannot
+// run, nothing in this project consumes it as a library, and its only realistic effect is that
+// someone picks it out of build/libs/ and deploys seven megabytes that do nothing. Leaving one
+// artifact in the directory is a better answer than documenting which of two to choose.
+tasks.named('jar') {
+    enabled = false
+}

@@ -151,11 +151,21 @@ class TestDatabaseTest {
     void refusesToOpenADatabaseOutsideTheTemporaryDirectory() {
         // This is the guard that keeps a test from ever touching the operator's real database,
         // including when a configuration value such as ./data/books.db is copied into a test.
-        assertThatThrownBy(() -> TestDatabase.named(Path.of("data"), "books.db"))
+        //
+        // The path has to be one that lands outside the temporary root from any working directory.
+        // A plain relative "data/books.db" does not: it is resolved against the working directory,
+        // so it is refused from a normal checkout but accepted when the checkout itself sits under
+        // java.io.tmpdir — which is where a release build from a scratch directory runs, and is
+        // exactly how this test first failed. Enough ".." to reach the filesystem root is still a
+        // relative path, so relative resolution is still what is being exercised, but normalize()
+        // clamps ".." at the root and the result is "/data/books.db" wherever it is run from.
+        var outsideAnyTemporaryDirectory = Path.of("../".repeat(20) + "data");
+
+        assertThatThrownBy(() -> TestDatabase.named(outsideAnyTemporaryDirectory, "books.db"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("outside the temporary directory");
 
-        assertThatThrownBy(() -> TestDatabase.reopen(Path.of("data/books.db")))
+        assertThatThrownBy(() -> TestDatabase.reopen(outsideAnyTemporaryDirectory.resolve("books.db")))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("outside the temporary directory");
     }

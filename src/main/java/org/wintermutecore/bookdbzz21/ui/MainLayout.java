@@ -11,6 +11,7 @@ import com.vaadin.flow.component.sidenav.SideNav;
 import com.vaadin.flow.component.sidenav.SideNavItem;
 import com.vaadin.flow.theme.lumo.LumoUtility;
 import com.vaadin.flow.spring.security.AuthenticationContext;
+import jakarta.annotation.security.PermitAll;
 
 /**
  * The frame every operator view sits in, carrying navigation to the three things there are to
@@ -19,7 +20,17 @@ import com.vaadin.flow.spring.security.AuthenticationContext;
  * <p>Books, authors and publishers are separate views because authors and publishers are reusable
  * records with their own lifecycle: an operator adds an author once and then selects it for many
  * books, so managing them has to be possible without opening a book at all.
+ *
+ * <h2>Why the layout is access-annotated</h2>
+ *
+ * <p>{@code @PermitAll} is required here, not merely tidy. Vaadin checks the parent layout's access
+ * rules as well as the view's and refuses to show a view that is more permissive than the frame it
+ * renders inside — reasonably, since this layout carries the navigation and the signed-in operator's
+ * name. Without the annotation the layout denies everyone, so every view it hosts became unreachable
+ * for the authenticated operator too, and a successful login bounced straight back to the login
+ * page. It is only ever as permissive as the views it frames.
  */
+@PermitAll
 public class MainLayout extends AppLayout {
 
     private final AuthenticationContext authentication;

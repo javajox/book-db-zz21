@@ -117,6 +117,26 @@ This was verified with a generated PKCS12 keystore: the server reported `Tomcat 
 
 The initial deployment exposes the embedded server directly, so no reverse proxy is involved. If one is introduced later and terminates TLS, set `server.forward-headers-strategy=framework` so Spring and Vaadin build absolute URLs and redirects from the forwarded headers rather than from the internal connection; without it a redirect to the login page can point at `http` or at the internal port. A proxy must also forward WebSocket upgrade headers if Vaadin push is ever enabled, and `.p12`, `.jks` and `.key` files are already covered by the repository ignore rules.
 
+## The release artifact
+
+The release is one file: `build/libs/book-db-zz21-0.0.1-SNAPSHOT.jar`, the executable Spring Boot JAR. Gradle's `jar` task is disabled, so the build no longer also writes `book-db-zz21-0.0.1-SNAPSHOT-plain.jar` beside it.
+
+That plain JAR held the application's own classes with an empty manifest, no `Main-Class` and no dependencies. It could not run, nothing in this project consumes it as a library, and its only realistic effect was that someone selects the wrong seven-megabyte file out of a directory containing two similarly named ones. The specification's instruction — distribute the executable JAR if the build also produces a plain one — is satisfied more reliably by producing only one artifact than by documenting which of two to pick.
+
+The packaged artifact is always built in Vaadin production mode. The documented release command is the one the specification prescribes:
+
+```bash
+./gradlew clean build -Pvaadin.productionMode=true
+```
+
+The `-P` flag is a safety margin rather than the mechanism. In this Vaadin 25 plugin, `bootJar` depends on `vaadinBuildFrontend` regardless of the flag, and the test suite sets `vaadin.productionMode` through `@SpringBootTest` properties rather than from Gradle. Building without the flag was checked and produces the same result: `vaadinBuildFrontend` runs, `META-INF/VAADIN/config/flow-build-info.json` reports `"productionMode" : true`, and all tests pass. A development-mode artifact therefore cannot be released by forgetting a flag. Keep the flag anyway, so the release does not depend on a plugin default that a future version could change.
+
+Startup needs the native-access option, because SQLite loads a native library:
+
+```bash
+java --enable-native-access=ALL-UNNAMED -jar book-db-zz21.jar
+```
+
 ## Storing the weight
 
 The specification's attribute table originally named the weight column `weight`, matching its JSON key. The schema stores `weight_grams INTEGER` instead, and the specification now names that column. This is the one place where the implementation departs from a column name the specification stated, so it is recorded here rather than left to a comment in a migration script.
@@ -129,6 +149,30 @@ The attribute is specified as a decimal in kilograms with at most three decimal 
 Three decimal places of a kilogram is exactly one gram, so an integer count of grams represents every permitted value exactly, keeps the `> 0` check and any future ordering arithmetic, and has one representation per weight. The column is named for its unit so that no reader mistakes its contents for kilograms — which is the actual risk an integer column introduces, and the reason the name differs rather than silently redefining `weight`.
 
 Conversion happens in the repository: kilograms in, grams out. The `BigDecimal` returned to the API is rescaled so that a whole number of kilograms serializes as `100` rather than `1E+2`.
+
+## Running locally from an IDE
+
+Since stage 14 the application refuses to start without credentials, so a development run needs them supplied just as a deployment does. Startup otherwise fails with `bookdb.security.operator-username is required` — correct behaviour, and the reason there is no built-in account to fall back on.
+
+Supply them in `config/application.properties` at the repository root. Spring Boot reads `./config/application.properties` from the process working directory by default and that file takes precedence over the one packaged in `src/main/resources`, so an IDE run, `./gradlew bootRun`, and a JAR launched from the repository root all pick it up with no run-configuration changes, no active profile and no environment variables. `/config/` is already in `.gitignore`, so development credentials cannot be committed by accident.
+
+Generate the values with the same tool a deployment uses, against a built artifact:
+
+```bash
+./gradlew clean build -Pvaadin.productionMode=true
+java -jar build/libs/book-db-zz21-0.0.1-SNAPSHOT.jar provision-credentials operator
+```
+
+Copy the three printed property lines into `config/application.properties` and keep the token it shows once. A development file also wants a database path, so a local run cannot touch anything a deployment uses:
+
+```properties
+bookdb.security.operator-username=operator
+bookdb.security.operator-password-hash=<from the tool>
+bookdb.security.api-token-digest=<from the tool>
+bookdb.database.path=./data/books.db
+```
+
+Note that this file is read by a packaged JAR too whenever it is launched from the repository root. That is intended for development, and it is a further reason the real deployment keeps its configuration in a directory of its own rather than beside the artifact.
 
 ## Local files and version control
 
