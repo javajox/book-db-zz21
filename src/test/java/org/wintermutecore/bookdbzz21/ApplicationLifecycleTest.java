@@ -19,6 +19,7 @@ import org.wintermutecore.bookdbzz21.application.AuthorService;
 import org.wintermutecore.bookdbzz21.application.BookService;
 import org.wintermutecore.bookdbzz21.application.PublisherService;
 import org.wintermutecore.bookdbzz21.config.CredentialProvisioning;
+import org.wintermutecore.bookdbzz21.config.DatabaseLocation;
 import org.wintermutecore.bookdbzz21.config.SchemaMigration;
 import org.wintermutecore.bookdbzz21.testsupport.AuthorFixtures;
 import org.wintermutecore.bookdbzz21.testsupport.BookFixtures;
@@ -240,31 +241,62 @@ class ApplicationLifecycleTest {
      * Starts the application against {@code file}, hands the running context to {@code work}, and
      * shuts it down — including when the assertion inside fails, so a failing test does not leave a
      * server listening.
+     *
+     * <p>The settings are passed as command-line arguments, not through
+     * {@code SpringApplicationBuilder.properties()}. That method registers <em>default</em>
+     * properties, which are the lowest-precedence source Spring Boot has, so anything at all — a
+     * {@code config/application.properties} in the working directory, an environment variable —
+     * silently overrides them. When that happened, this test ran against the developer's own
+     * database and the failure case below dropped its tables. Command-line arguments are the
+     * highest-precedence source, so the test's own settings win over whatever the machine supplies.
      */
     private void run(Path file, Consumer<ConfigurableApplicationContext> work) {
         var application = new SpringApplicationBuilder(BookDbZz21Application.class)
-                .properties(Map.<String, Object>of(
-                        "bookdb.database.path", file.toString(),
-                        "bookdb.security.operator-username", "operator",
-                        "bookdb.security.operator-password-hash",
-                        CredentialProvisioning.hashPassword("lifecycle-password"),
-                        "bookdb.security.api-token-digest",
-                        CredentialProvisioning.sha256Hex(API_TOKEN),
-                        // As a deployment runs, using the prebuilt frontend bundle.
-                        "vaadin.productionMode", "true",
-                        "server.port", "0"))
-                // Typed as the base event and filtered here: a lambda does not retain its type
-                // argument, so Spring could not work out which events to deliver to it.
                 .listeners((ApplicationListener<ApplicationEvent>) event -> {
+                    // Typed as the base event and filtered here: a lambda does not retain its type
+                    // argument, so Spring could not work out which events to deliver to it.
                     if (event instanceof ApplicationPreparedEvent) {
                         captureLogging();
                     }
                 })
                 .build();
 
-        try (var context = application.run()) {
+        try (var context = application.run(
+                "--bookdb.database.path=" + file,
+                "--bookdb.security.operator-username=operator",
+                "--bookdb.security.operator-password-hash="
+                        + CredentialProvisioning.hashPassword("lifecycle-password"),
+                "--bookdb.security.api-token-digest="
+                        + CredentialProvisioning.sha256Hex(API_TOKEN),
+                // As a deployment runs, using the prebuilt frontend bundle.
+                "--vaadin.productionMode=true",
+                "--server.port=0")) {
+            assertRunningAgainstATemporaryDatabase(context, file);
             work.accept(context);
         }
+    }
+
+    /**
+     * Refuses to hand over a context that is not attached to the database this test asked for.
+     *
+     * <p>Correct precedence above is what makes the right database get opened; this is what makes a
+     * mistake survivable. These tests delete rows and drop tables, so "which database did I actually
+     * get" has to be answered before any of that runs, not inferred afterwards from a confusing
+     * assertion failure. The configuration being overridden was not hypothetical, and the cost was
+     * somebody's data.
+     */
+    private static void assertRunningAgainstATemporaryDatabase(
+            ConfigurableApplicationContext context, Path expected) {
+        var actual = context.getBean(DatabaseLocation.class).path();
+        var temporaryRoot = Path.of(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize();
+
+        assertThat(actual)
+                .describedAs("this test writes to and drops tables in the database it opens, so it "
+                        + "must be the temporary one it configured and nothing else")
+                .isEqualTo(expected.toAbsolutePath().normalize());
+        assertThat(actual)
+                .describedAs("a test database must live under the temporary directory")
+                .startsWith(temporaryRoot);
     }
 
     private static int portOf(ConfigurableApplicationContext context) {

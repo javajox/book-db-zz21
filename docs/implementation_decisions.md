@@ -174,6 +174,26 @@ bookdb.database.path=./data/books.db
 
 Note that this file is read by a packaged JAR too whenever it is launched from the repository root. That is intended for development, and it is a further reason the real deployment keeps its configuration in a directory of its own rather than beside the artifact.
 
+## Keeping tests away from real data
+
+Two settings in the build and one assertion in the test suite exist because the test suite once deleted a developer's database. They are recorded here because each looks like an arbitrary precaution until the failure is explained.
+
+The configuration above — development credentials in `config/application.properties` — is read by Spring Boot's default config locations, which include `./config/` relative to the process working directory. For Gradle's `test` task that working directory is the repository root, so the file reached every test that boots the real application.
+
+That alone would have been harmless if the tests had won the resulting conflict, and they did not. `SpringApplicationBuilder.properties()` registers *default* properties, the lowest-precedence source Spring Boot has, so `bookdb.database.path=./data/books.db` from the file outranked the temporary path the test had set. A lifecycle test that drops tables to exercise an error path therefore dropped them in the developer's own database.
+
+Three changes, each sufficient on its own:
+
+| Change | Where |
+|--------|-------|
+| `spring.config.location=optional:classpath:/` on the `test` task, removing every file-based config location while keeping the packaged `application.properties` | `build.gradle` |
+| Test settings passed as command-line arguments, the highest-precedence source, instead of as default properties | `ApplicationLifecycleTest` |
+| An assertion, before any test body runs, that the resolved database is both the file the test asked for and under `java.io.tmpdir` | `ApplicationLifecycleTest` |
+
+The third is the one that matters. Correct precedence is what makes the right database get opened; the assertion is what makes a mistake survivable, by answering "which database did I actually get" before anything destructive runs rather than leaving it to be inferred from a confusing failure afterwards. It was verified by restoring both bugs deliberately: all three tests then failed immediately, naming the wrong path, and nothing was dropped.
+
+`TestDatabase` has enforced the same temporary-directory rule since stage 2 for tests that build their own database. The gap was that a test which boots the whole application does not go through `TestDatabase` at all, and so inherited none of its protection.
+
 ## Local files and version control
 
 Use the ignored root directories `data/`, `backups/`, and `logs/` for local runtime files. Use `config/`, `secrets/`, or ignored `.env`/`*.local.properties`/`*.local.yml`/`*.local.yaml` files for deployment settings and credentials. Environment files must be loaded by the deployment tooling; Spring Boot does not automatically read `.env` files.

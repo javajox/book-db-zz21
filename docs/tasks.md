@@ -428,16 +428,148 @@ One naming note for stage 17: the artifact is `book-db-zz21-0.0.1-SNAPSHOT.jar`,
 
 Specification: [Runtime configuration](system_specification.md#runtime-configuration), [Operations and data durability](system_specification.md#operations-and-data-durability).
 
-- [ ] **17.1** Expand the README with prerequisites, development startup, automated tests, production build, executable JAR selection, and links to the specification and operating instructions.
-- [ ] **17.2** Document configuration-file, environment-variable, and command-line examples for port, database path, and busy timeout. Explain working-directory-relative paths and use an explicit absolute database path in production examples.
-- [ ] **17.3** Document installation for the selected host: Java 25, a writable local data directory, one application process, startup/shutdown procedure, logging locations, selected access policy, and HTTPS where applicable.
-- [ ] **17.4** Document and perform an offline backup: stop the application cleanly, close database connections, and copy the database to a separate backup location. Confirm the backup contains the image BLOBs without separate image files.
-- [ ] **17.5** Document that a live backup, when needed, must use SQLite backup facilities. Never prescribe copying only the main database file while WAL writes are active. Verify any live-backup procedure supplied with the project.
-- [ ] **17.6** Document and perform restoration into a separate data directory. Start the application against the restored database and verify book counts, IDs, author/publisher relationships, ISBN/metadata uniqueness, and exact cover bytes through the GUI/API.
-- [ ] **17.7** Document the upgrade procedure: take and verify a backup before schema upgrades, replace the executable artifact without replacing data, apply migrations on startup, and inspect diagnostics. Document recovery from a failed upgrade using the backed-up database and compatible application artifact.
-- [ ] **17.8** Document the supported operator workflows, delete permanence, duplicate-book policy, JSON examples, error responses, and the absence of guaranteed book/author ordering. Keep these instructions consistent with the final implementation.
+- [x] **17.1** Expand the README with prerequisites, development startup, automated tests, production build, executable JAR selection, and links to the specification and operating instructions.
+- [x] **17.2** Document configuration-file, environment-variable, and command-line examples for port, database path, and busy timeout. Explain working-directory-relative paths and use an explicit absolute database path in production examples.
+- [x] **17.3** Document installation for the selected host: Java 25, a writable local data directory, one application process, startup/shutdown procedure, logging locations, selected access policy, and HTTPS where applicable.
+- [x] **17.4** Document and perform an offline backup: stop the application cleanly, close database connections, and copy the database to a separate backup location. Confirm the backup contains the image BLOBs without separate image files.
+- [x] **17.5** Document that a live backup, when needed, must use SQLite backup facilities. Never prescribe copying only the main database file while WAL writes are active. Verify any live-backup procedure supplied with the project.
+- [x] **17.6** Document and perform restoration into a separate data directory. Start the application against the restored database and verify book counts, IDs, author/publisher relationships, ISBN/metadata uniqueness, and exact cover bytes through the GUI/API.
+- [x] **17.7** Document the upgrade procedure: take and verify a backup before schema upgrades, replace the executable artifact without replacing data, apply migrations on startup, and inspect diagnostics. Document recovery from a failed upgrade using the backed-up database and compatible application artifact.
+- [x] **17.8** Document the supported operator workflows, delete permanence, duplicate-book policy, JSON examples, error responses, and the absence of guaranteed book/author ordering. Keep these instructions consistent with the final implementation.
 
 Completion criterion: another operator can install, run, back up, restore, and upgrade the application using documented and verified procedures.
+
+### Stage 17 evidence
+
+Two documents were written — [README.md](../README.md) for building and developing, and
+[operating_instructions.md](operating_instructions.md) for running a deployment — and the four items
+that say *perform* were performed. Every procedure in the operating instructions was executed against
+the packaged artifact before being written down, and the evidence is quoted inline there rather than
+only here.
+
+The deployment shape was chosen by the operator: no service manager and no fixed filesystem layout.
+It is one JAR copied to any writable directory and started with arguments, so the instructions are
+path-agnostic and `systemd` does not appear. The artifact is now named `book-db-zz21.jar` by the build
+(`bootJar.archiveFileName`), which closes the naming mismatch stage 16 left open — every documented
+command now works verbatim, with no rename step to forget.
+
+**17.1 and 17.2** The README covers prerequisites — making explicit that Node.js, Gradle, a database
+server and a servlet container are all needed for *building* at most and never for *running* — plus
+local startup, `./gradlew check` with its test count, the production build, and the single artifact.
+The operating instructions document all three configuration mechanisms for port, database path and
+busy timeout.
+
+The environment-variable names were verified against the artifact rather than derived from Spring
+Boot's binding rules: a run with `BOOKDB_DATABASE_BUSY_TIMEOUT_MS=7321` reported
+`busy_timeout=7321ms` against a default of 5000, and the undashed `BOOKDB_DATABASE_BUSYTIMEOUTMS`
+works equally. That run also supplied all three credentials by environment variable, which is the
+mechanism the instructions recommend for them, since environment variables do not appear in process
+listings.
+
+Working-directory-relative paths get their own warning with the failure mode spelled out — the same
+command run from a different directory silently opens or creates a different database, and an empty
+catalogue is the symptom — and every production example uses an absolute path.
+
+**17.3** Installation is Java 25, a writable local directory, one process per database. The
+local-filesystem requirement is explained by what enforces it: the application reads the journal mode
+back from SQLite at startup and refuses to run if write-ahead logging did not engage, rather than
+running without it. `--enable-native-access=ALL-UNNAMED` is documented with the actual warning text
+it suppresses and why it will stop being optional. Startup and shutdown quote the real log lines,
+including why `kill -9` is wrong: it skips the checkpoint, so committed data stays in the `-wal` file
+and an offline backup taken in that state is incomplete.
+
+**17.4 — performed.** An offline backup of this project's own database. With the application stopped,
+`ls` showed `books.db` alone, confirming the checkpoint had folded the log in and the single file was
+complete; the copy's SHA-256 matched; and reading the *backup* independently found 2 books, 3
+authors, 3 publishers, 4 author links and one cover image — a 155,849-byte JPEG whose digest matched
+the original. A filesystem search confirmed no image file exists anywhere outside the database, which
+is what makes one file a complete backup.
+
+**17.5 — documented and demonstrated.** The instructions require SQLite's own facility
+(`VACUUM INTO`) for a live backup and forbid copying only the main database file. That is shown
+rather than asserted: with the application running, a record was committed and both methods were
+applied to the same database.
+
+| Method | The committed record | `PRAGMA integrity_check` |
+|--------|----------------------|--------------------------|
+| `cp` of `books.db` only | **lost** | `ok` |
+| `VACUUM INTO` | present | `ok` |
+
+The `-wal` file held 12,392 bytes of committed data at that moment. The important half is the second
+column: the incomplete backup passes an integrity check, because SQLite is confirming the file is a
+structurally valid database and not that it contains everything committed. No verification step can
+catch this, so the method has to be right to begin with — which is exactly why the instructions name
+one method and rule out the other.
+
+**17.6 — performed.** A restore from that live backup into a directory of its own. The restored
+database started with `Database schema at … is up to date` — no migration — and served 2 books with
+identical id sets from both endpoints, the correct authors and publishers per book, and a cover image
+that was byte-identical to the pre-backup JPEG by SHA-256.
+
+Uniqueness was checked too, because duplicate detection rests on database constraints and stored
+keys, so a restore that lost them would start accepting duplicates later. Against the restored file,
+every attempt was refused: a duplicate id, a duplicate ISBN-13, an ISBN-10 equivalent to a stored
+ISBN-13, a duplicate title/authors/edition/language/publisher combination, and a reference to a
+missing publisher. The third is the one worth noting — the two ISBN forms are different strings, and
+only the stored canonical identity makes them the same book. One book carrying an equivalent ISBN
+pair had to be seeded for these attempts, since the operator's own records have no ISBNs; that is
+stated in the instructions rather than passed off as operator data.
+
+**17.7 — documented and rehearsed, including the failure.** The upgrade procedure is back up and
+verify, replace only the artifact, start, read the log. A new artifact applies outstanding migrations
+and preserves data; normal startup never drops and recreates the schema.
+
+The failed upgrade was rehearsed with an artifact carrying a deliberately broken migration, run
+against a populated database. Flyway reported `Migration … failed! Changes successfully rolled back`,
+named the file and the SQL error, and the process exited 1 without serving anything. Afterwards the
+database was **byte-identical to the backup taken before the upgrade** — same SHA-256 — with no
+version 2 history row and no half-applied column.
+
+That result is what makes the documented recovery one command rather than a restore: the previous
+artifact was started against the same database, reported `up to date`, and served every record. The
+instructions therefore say to keep the previous artifact until the upgrade is confirmed, and to
+restore from backup only if the database itself was damaged — which a failed migration alone does
+not do.
+
+**17.8** The operator-facing half of the instructions covers the three views, the same-name-is-the-
+same-author rule with its whitespace, case, accent and punctuation consequences, the immutable
+identifier and why it may stop matching the title, the attribute limits (checked against the schema's
+own CHECK constraints), ISBN validation including cross-form uniqueness, cover handling, and the
+duplicate-book policy stated as what does *and does not* make a distinct book. Delete permanence is
+stated plainly and linked to the restore procedure, since restoring a backup is the only recovery.
+
+The integrator half gives both endpoints, the key conventions, a worked `/books-full` example taken
+from real stored data, the `401`/`503`/`500` error contract with the retryable one marked, and two
+warnings that matter to a client author: no ordering is guaranteed for books or for author names
+within a book, so match on `id`; and a failure is never returned as `200 []`, so an empty array means
+the catalogue is genuinely empty.
+
+**An incident, and three fixes.** Partway through this stage the test suite deleted the developer's
+database. The `config/application.properties` created for IDE runs sits in one of Spring Boot's
+default config locations relative to the working directory, which for Gradle's `test` task is the
+repository root; and `SpringApplicationBuilder.properties()` registers *default* properties, the
+lowest-precedence source there is, so the file's `bookdb.database.path` outranked the temporary path
+`ApplicationLifecycleTest` had set. A test case that drops tables to exercise an error path then
+dropped them in the real database.
+
+The data was recovered in full: `DROP TABLE` only resets the page header, so the cell pointer array
+and record content survived in the freed pages. Parsing them and following the overflow chain
+recovered all three rows including the 155,849-byte JPEG, which still decoded as a 1200×909 image;
+the records were re-inserted with their original identifiers into a freshly migrated database and
+verified through the API, cover digest included.
+
+The fixes are recorded in
+[Keeping tests away from real data](implementation_decisions.md#keeping-tests-away-from-real-data):
+`spring.config.location=optional:classpath:/` on the `test` task so tests read no file-based
+configuration at all, test settings passed as command-line arguments so they hold the highest
+precedence, and an assertion before every test body that the resolved database is both the file the
+test asked for and under `java.io.tmpdir`. The third was verified by deliberately restoring both
+bugs: all three tests then failed immediately naming the wrong path, and nothing was dropped.
+
+The lesson is narrower than "be careful". `TestDatabase` has enforced the temporary-directory rule
+since stage 2, but a test that boots the whole application never goes through `TestDatabase` and so
+inherited none of its protection. The guard now sits where the application is booted, which is the
+only place it could have helped.
 
 ## 18. Run the release acceptance workflow and deliver
 

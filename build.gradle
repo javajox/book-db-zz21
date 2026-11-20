@@ -47,6 +47,21 @@ tasks.named('test') {
     jvmArgs '--enable-native-access=ALL-UNNAMED'
     // Image fixtures encode real PNG/JPEG bytes through ImageIO, which must not try to reach a display.
     systemProperty 'java.awt.headless', 'true'
+
+    // Tests must never read the developer's local deployment configuration.
+    //
+    // Spring Boot's default config locations include ./config/ and ./ relative to the working
+    // directory, which for the test task is the repository root. A config/application.properties
+    // holding development credentials and bookdb.database.path=./data/books.db therefore reached
+    // every test that boots the real application — and outranked the database path the test had
+    // set, because SpringApplicationBuilder.properties() registers *default* properties, the
+    // lowest-precedence source there is. A lifecycle test consequently ran against the developer's
+    // own database and dropped its tables.
+    //
+    // Restricting the locations to the classpath keeps the packaged application.properties, which
+    // tests do need, and removes every file-based location. @SpringBootTest properties and
+    // @DynamicPropertySource are unaffected.
+    systemProperty 'spring.config.location', 'optional:classpath:/'
 }
 
 // A green build that silently ran no tests is not verification. Gradle reports `test NO-SOURCE`
@@ -89,6 +104,16 @@ tasks.named('check') {
 
 tasks.named('bootRun') {
     jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+
+// The artifact is named for the application, not for the build.
+//
+// Gradle's default, book-db-zz21-0.0.1-SNAPSHOT.jar, means every documented command either carries
+// a version that goes stale or asks the operator to rename the file first — a step that is easy to
+// forget and leaves two similar files behind when it is half done. The version stays available
+// where it belongs, in the manifest's Implementation-Version.
+tasks.named('bootJar') {
+    archiveFileName = 'book-db-zz21.jar'
 }
 
 // The release is the executable Spring Boot JAR, so that is the only JAR the build produces.
